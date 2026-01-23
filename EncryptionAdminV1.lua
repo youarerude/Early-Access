@@ -398,8 +398,16 @@ local Commands = {
         requiresValue = true,
         valueType = "player",
         func = function(value)
-            if not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+            local you = LocalPlayer.Character
+            if not you then
                 return false, "Your character not found"
+            end
+            
+            local humanoid = you:FindFirstChild("Humanoid")
+            local humanoidrootpart = you:FindFirstChild("HumanoidRootPart")
+            
+            if not humanoid or not humanoidrootpart then
+                return false, "Your character is missing required parts"
             end
             
             local targetPlayer = findPlayer(value)
@@ -407,34 +415,51 @@ local Commands = {
                 return false, "Player not found or has no character"
             end
             
-            local targetHead = targetPlayer.Character:FindFirstChild("Head")
-            if not targetHead then
-                return false, "Player has no head"
+            local plr = targetPlayer.Character
+            local plrhead = plr:FindFirstChild("Head")
+            local plrhumanoid = plr:FindFirstChild("Humanoid")
+            
+            if not plrhead or not plrhumanoid then
+                return false, "Player has no head or humanoid"
             end
             
-            -- Create seat on player's head
-            local seat = Instance.new("Seat")
-            seat.Name = "HeadSeat"
-            seat.Size = Vector3.new(2, 0.5, 2)
-            seat.Transparency = 1
-            seat.CanCollide = false
-            seat.Anchored = false
-            seat.Parent = workspace
+            -- Execute headsit
+            humanoidrootpart.CFrame = plrhead.CFrame * CFrame.new(0, 0, 1)
+            local weld = Instance.new("WeldConstraint")
+            weld.Part0 = humanoidrootpart
+            weld.Part1 = plrhead
+            weld.Parent = humanoidrootpart
+            humanoid.Sit = true
             
-            -- Create weld to attach seat to head
-            local weld = Instance.new("Weld")
-            weld.Part0 = targetHead
-            weld.Part1 = seat
-            weld.C0 = CFrame.new(0, 1.5, 0)
-            weld.Parent = seat
+            -- Continuous loop to maintain headsit
+            spawn(function()
+                while true do
+                    task.wait(0.01)
+                    plrhead.CanCollide = false
+                    
+                    if not plr or not plr.Parent then
+                        weld:Destroy()
+                        humanoid.Sit = false
+                        plrhead.CanCollide = true
+                        break
+                    end
+                    
+                    if humanoid.Health == 0 then
+                        weld:Destroy()
+                        plrhead.CanCollide = true
+                        break
+                    end
+                    
+                    if humanoid.Jump == true then
+                        weld:Destroy()
+                        plrhead.CanCollide = true
+                        humanoid.Jump = true
+                        break
+                    end
+                end
+            end)
             
-            -- Teleport and sit
-            task.wait(0.1)
-            LocalPlayer.Character.HumanoidRootPart.CFrame = seat.CFrame
-            task.wait(0.1)
-            seat:Sit(LocalPlayer.Character.Humanoid)
-            
-            return true, "Sitting on " .. targetPlayer.DisplayName .. "'s head"
+            return true, "Now sitting on " .. targetPlayer.DisplayName .. "'s head"
         end
     },
     {
