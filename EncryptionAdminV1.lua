@@ -33,6 +33,8 @@ local lastExecutedValue = nil
 local espEnabled = false
 local espObjects = {}
 local espConnections = {}
+local headsitSeat = nil
+local headsitConnection = nil
 
 -- Create ScreenGui
 local ScreenGui = Instance.new("ScreenGui")
@@ -257,6 +259,7 @@ ListPadding.Parent = ScrollFrame
 local Commands = {
     {
         name = "√Speed",
+        aliases = "√ws, √walkspeed",
         description = "Sets your character speed",
         requiresValue = true,
         valueType = "number",
@@ -275,6 +278,7 @@ local Commands = {
     },
     {
         name = "√JumpPower",
+        aliases = "√jp, √jump",
         description = "Sets your jump power",
         requiresValue = true,
         valueType = "number",
@@ -294,6 +298,7 @@ local Commands = {
     },
     {
         name = "√Goto",
+        aliases = "√tp, √teleport",
         description = "Teleport to a player",
         requiresValue = true,
         valueType = "player",
@@ -313,6 +318,7 @@ local Commands = {
     },
     {
         name = "√Fly",
+        aliases = "√flight",
         description = "Enable fly with custom speed",
         requiresValue = true,
         valueType = "number",
@@ -325,6 +331,7 @@ local Commands = {
     },
     {
         name = "√Unfly",
+        aliases = "√unflight",
         description = "Disable fly",
         requiresValue = false,
         func = function()
@@ -334,6 +341,7 @@ local Commands = {
     },
     {
         name = "√Noclip",
+        aliases = "√clip",
         description = "Enable noclip through objects",
         requiresValue = false,
         func = function()
@@ -343,6 +351,7 @@ local Commands = {
     },
     {
         name = "√Unnoclip",
+        aliases = "√unclip",
         description = "Disable noclip",
         requiresValue = false,
         func = function()
@@ -352,6 +361,7 @@ local Commands = {
     },
     {
         name = "√PreviousCommand",
+        aliases = "√prev, √last, √again",
         description = "Re-execute the previous command",
         requiresValue = false,
         func = function()
@@ -365,6 +375,7 @@ local Commands = {
     },
     {
         name = "√ESP",
+        aliases = "√wallhack",
         description = "Enable ESP for all players",
         requiresValue = false,
         func = function()
@@ -374,11 +385,39 @@ local Commands = {
     },
     {
         name = "√UnESP",
+        aliases = "√unesp, √unwallhack",
         description = "Disable ESP",
         requiresValue = false,
         func = function()
             disableESP()
             return true, "ESP disabled"
+        end
+    },
+    {
+        name = "√Headsit",
+        aliases = "√hsit, √headt, √hs",
+        description = "Sit on a player's head",
+        requiresValue = true,
+        valueType = "player",
+        func = function(value)
+            return headsitPlayer(value)
+        end
+    },
+    {
+        name = "√InfiniteYield",
+        aliases = "√infyield, √infiniteyield, √iy, √IY",
+        description = "Load Infinite Yield admin script",
+        requiresValue = false,
+        func = function()
+            local success, err = pcall(function()
+                loadstring(game:HttpGet('https://raw.githubusercontent.com/EdgeIY/infiniteyield/master/source'))()
+            end)
+            
+            if success then
+                return true, "Infinite Yield loaded successfully"
+            else
+                return false, "Failed to load Infinite Yield: " .. tostring(err)
+            end
         end
     }
 }
@@ -839,6 +878,80 @@ function disableESP()
     espObjects = {}
 end
 
+function headsitPlayer(value)
+    -- Clean up existing headsit
+    if headsitSeat then
+        headsitSeat:Destroy()
+        headsitSeat = nil
+    end
+    if headsitConnection then
+        headsitConnection:Disconnect()
+        headsitConnection = nil
+    end
+    
+    if not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+        return false, "Your character not found"
+    end
+    
+    local targetPlayer = findPlayer(value)
+    if not targetPlayer then
+        return false, "Player not found"
+    end
+    
+    if not targetPlayer.Character or not targetPlayer.Character:FindFirstChild("Head") then
+        return false, "Target player has no character or head"
+    end
+    
+    local targetHead = targetPlayer.Character.Head
+    
+    -- Create invisible seat
+    headsitSeat = Instance.new("Seat")
+    headsitSeat.Name = "HeadsitSeat"
+    headsitSeat.Size = Vector3.new(2, 0.5, 2)
+    headsitSeat.Transparency = 1
+    headsitSeat.CanCollide = false
+    headsitSeat.Anchored = true
+    headsitSeat.CFrame = targetHead.CFrame * CFrame.new(0, 1.5, 0)
+    headsitSeat.Parent = workspace
+    
+    -- Make seat follow the target's head
+    headsitConnection = RunService.Heartbeat:Connect(function()
+        if not headsitSeat or not headsitSeat.Parent then
+            if headsitConnection then
+                headsitConnection:Disconnect()
+                headsitConnection = nil
+            end
+            return
+        end
+        
+        if targetPlayer.Character and targetPlayer.Character:FindFirstChild("Head") then
+            headsitSeat.CFrame = targetPlayer.Character.Head.CFrame * CFrame.new(0, 1.5, 0)
+        else
+            -- Target player died or left, clean up
+            if headsitSeat then
+                headsitSeat:Destroy()
+                headsitSeat = nil
+            end
+            if headsitConnection then
+                headsitConnection:Disconnect()
+                headsitConnection = nil
+            end
+        end
+    end)
+    
+    -- Teleport player to seat and make them sit
+    task.wait(0.1)
+    LocalPlayer.Character.HumanoidRootPart.CFrame = headsitSeat.CFrame
+    task.wait(0.1)
+    
+    local humanoid = LocalPlayer.Character:FindFirstChild("Humanoid")
+    if humanoid then
+        humanoid.Sit = true
+    end
+    
+    return true, "Now sitting on " .. targetPlayer.DisplayName .. "'s head"
+end
+
 function createNotification(message, isSuccess)
     local NotifFrame = Instance.new("Frame")
     NotifFrame.Size = UDim2.new(0, 250, 0, 60)
@@ -890,7 +1003,7 @@ end
 function createCommandButton(commandData, index)
     local CommandFrame = Instance.new("Frame")
     CommandFrame.Name = "Command_" .. index
-    CommandFrame.Size = UDim2.new(1, -10, 0, 60)
+    CommandFrame.Size = UDim2.new(1, -10, 0, commandData.aliases and 80 or 60)
     CommandFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
     CommandFrame.BorderSizePixel = 0
     CommandFrame.Parent = ScrollFrame
@@ -917,10 +1030,29 @@ function createCommandButton(commandData, index)
     CommandName.TextXAlignment = Enum.TextXAlignment.Left
     CommandName.Parent = CommandFrame
     
+    local yOffset = 25
+    
+    -- Add aliases if they exist
+    if commandData.aliases then
+        local AliasLabel = Instance.new("TextLabel")
+        AliasLabel.Name = "AliasLabel"
+        AliasLabel.Size = UDim2.new(1, -70, 0, 15)
+        AliasLabel.Position = UDim2.new(0, 10, 0, yOffset)
+        AliasLabel.BackgroundTransparency = 1
+        AliasLabel.Text = "Alias: " .. commandData.aliases
+        AliasLabel.TextColor3 = Color3.fromRGB(100, 100, 100)
+        AliasLabel.TextSize = 11
+        AliasLabel.Font = Enum.Font.Gotham
+        AliasLabel.TextXAlignment = Enum.TextXAlignment.Left
+        AliasLabel.Parent = CommandFrame
+        
+        yOffset = yOffset + 15
+    end
+    
     local CommandDesc = Instance.new("TextLabel")
     CommandDesc.Name = "CommandDesc"
-    CommandDesc.Size = UDim2.new(1, -70, 0, 30)
-    CommandDesc.Position = UDim2.new(0, 10, 0, 25)
+    CommandDesc.Size = UDim2.new(1, -70, 0, commandData.aliases and 25 or 30)
+    CommandDesc.Position = UDim2.new(0, 10, 0, yOffset)
     CommandDesc.BackgroundTransparency = 1
     CommandDesc.Text = commandData.description
     CommandDesc.TextColor3 = Color3.fromRGB(150, 150, 150)
@@ -1015,6 +1147,7 @@ function populateCommands(filterText)
     end
     
     local count = 0
+    local totalHeight = 0
     filterText = filterText and filterText:lower() or ""
     
     for index, commandData in ipairs(Commands) do
@@ -1023,20 +1156,22 @@ function populateCommands(filterText)
         if filterText ~= "" then
             local commandNameLower = commandData.name:lower()
             local commandDescLower = commandData.description:lower()
+            local aliasLower = commandData.aliases and commandData.aliases:lower() or ""
             
-            if not (commandNameLower:find(filterText, 1, true) or commandDescLower:find(filterText, 1, true)) then
+            if not (commandNameLower:find(filterText, 1, true) or commandDescLower:find(filterText, 1, true) or aliasLower:find(filterText, 1, true)) then
                 shouldShow = false
             end
         end
         
         if shouldShow then
-            createCommandButton(commandData, index)
+            local cmdFrame = createCommandButton(commandData, index)
+            totalHeight = totalHeight + cmdFrame.Size.Y.Offset + 5
             count = count + 1
         end
     end
     
     -- Update canvas size
-    ScrollFrame.CanvasSize = UDim2.new(0, 0, 0, count * 65 + 10)
+    ScrollFrame.CanvasSize = UDim2.new(0, 0, 0, totalHeight + 10)
 end
 
 function parseCommand(text)
@@ -1316,6 +1451,16 @@ LocalPlayer.CharacterAdded:Connect(function(character)
         task.wait(0.5)
         enableFly(savedSpeed)
     end
+    
+    -- Clean up headsit on respawn
+    if headsitSeat then
+        headsitSeat:Destroy()
+        headsitSeat = nil
+    end
+    if headsitConnection then
+        headsitConnection:Disconnect()
+        headsitConnection = nil
+    end
 end)
 
 -- Handle mobile keyboard
@@ -1555,7 +1700,14 @@ local commandAliases = {
     ["√again"] = "√PreviousCommand",
     ["√wallhack"] = "√ESP",
     ["√unesp"] = "√UnESP",
-    ["√unwallhack"] = "√UnESP"
+    ["√unwallhack"] = "√UnESP",
+    ["√hsit"] = "√Headsit",
+    ["√headt"] = "√Headsit",
+    ["√hs"] = "√Headsit",
+    ["√infyield"] = "√InfiniteYield",
+    ["√infiniteyield"] = "√InfiniteYield",
+    ["√iy"] = "√InfiniteYield",
+    ["√IY"] = "√InfiniteYield"
 }
 
 local function resolveAlias(commandName)
@@ -1743,6 +1895,12 @@ ScreenGui.AncestryChanged:Connect(function()
         disableESP()
         if noclipConnection then
             noclipConnection:Disconnect()
+        end
+        if headsitSeat then
+            headsitSeat:Destroy()
+        end
+        if headsitConnection then
+            headsitConnection:Disconnect()
         end
     end
 end)
