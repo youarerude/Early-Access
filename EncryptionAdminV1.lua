@@ -33,6 +33,8 @@ local lastExecutedValue = nil
 local espEnabled = false
 local espObjects = {}
 local espConnections = {}
+local espPartObjects = {}
+local espPartConnections = {}
 
 -- Create ScreenGui
 local ScreenGui = Instance.new("ScreenGui")
@@ -389,6 +391,21 @@ local Commands = {
         func = function()
             disableESP()
             return true, "ESP disabled"
+        end
+    },
+    {
+        name = "√ESPPart",
+        aliases = "√esppart, √EspP, √EPart",
+        description = "Highlight specific parts/models",
+        requiresValue = true,
+        valueType = "string",
+        func = function(value)
+            if not value or value == "" then
+                return false, "Please specify a part or model name"
+            end
+            
+            enableESPPart(value)
+            return true, "ESP enabled for: " .. value
         end
     },
     {
@@ -935,6 +952,149 @@ function disableESP()
         end
     end
     espObjects = {}
+end
+
+function enableESPPart(partName)
+    -- Clear previous ESP parts
+    for _, highlight in pairs(espPartObjects) do
+        if highlight then
+            highlight:Destroy()
+        end
+    end
+    espPartObjects = {}
+    
+    for _, connection in pairs(espPartConnections) do
+        if connection then
+            connection:Disconnect()
+        end
+    end
+    espPartConnections = {}
+    
+    local searchName = partName:lower()
+    local foundCount = 0
+    
+    local function highlightObject(obj)
+        -- Check if it's a BasePart or Model
+        local isBasePart = obj:IsA("BasePart")
+        local isModel = obj:IsA("Model")
+        
+        if not (isBasePart or isModel) then return end
+        
+        -- Check if name matches
+        if not obj.Name:lower():find(searchName, 1, true) then return end
+        
+        -- Don't highlight player characters
+        if obj:FindFirstAncestorOfClass("Model") then
+            local model = obj:FindFirstAncestorOfClass("Model")
+            if Players:GetPlayerFromCharacter(model) then
+                return
+            end
+        end
+        
+        -- Create highlight
+        local highlight = Instance.new("Highlight")
+        highlight.Name = "ESPPartHighlight"
+        highlight.Adornee = isModel and obj or obj.Parent
+        highlight.FillColor = Color3.fromRGB(255, 0, 255)
+        highlight.OutlineColor = Color3.fromRGB(255, 100, 255)
+        highlight.FillTransparency = 0.5
+        highlight.OutlineTransparency = 0
+        highlight.Parent = obj
+        
+        table.insert(espPartObjects, highlight)
+        foundCount = foundCount + 1
+        
+        -- Create BillboardGui for distance tracking
+        if isBasePart or (isModel and obj:FindFirstChild("PrimaryPart")) then
+            local targetPart = isBasePart and obj or obj.PrimaryPart
+            if targetPart then
+                local billboard = Instance.new("BillboardGui")
+                billboard.Name = "ESPPartBillboard"
+                billboard.Adornee = targetPart
+                billboard.Size = UDim2.new(0, 150, 0, 50)
+                billboard.StudsOffset = Vector3.new(0, 2, 0)
+                billboard.AlwaysOnTop = true
+                billboard.Parent = targetPart
+                
+                local bgFrame = Instance.new("Frame")
+                bgFrame.Size = UDim2.new(1, 0, 1, 0)
+                bgFrame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+                bgFrame.BackgroundTransparency = 0.5
+                bgFrame.BorderSizePixel = 0
+                bgFrame.Parent = billboard
+                
+                local bgCorner = Instance.new("UICorner")
+                bgCorner.CornerRadius = UDim.new(0, 8)
+                bgCorner.Parent = bgFrame
+                
+                local textLabel = Instance.new("TextLabel")
+                textLabel.Name = "InfoLabel"
+                textLabel.Size = UDim2.new(1, -10, 1, -10)
+                textLabel.Position = UDim2.new(0, 5, 0, 5)
+                textLabel.BackgroundTransparency = 1
+                textLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+                textLabel.TextSize = 14
+                textLabel.Font = Enum.Font.GothamBold
+                textLabel.TextWrapped = true
+                textLabel.Parent = bgFrame
+                
+                table.insert(espPartObjects, billboard)
+                
+                -- Update loop for distance
+                local updateConnection = RunService.Heartbeat:Connect(function()
+                    if not targetPart.Parent then
+                        if billboard then billboard:Destroy() end
+                        if highlight then highlight:Destroy() end
+                        return
+                    end
+                    
+                    if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+                        local distance = (LocalPlayer.Character.HumanoidRootPart.Position - targetPart.Position).Magnitude
+                        textLabel.Text = string.format("%s\n%.1f Studs", obj.Name, distance)
+                    end
+                end)
+                
+                table.insert(espPartConnections, updateConnection)
+            end
+        end
+    end
+    
+    -- Search in workspace
+    for _, obj in pairs(workspace:GetDescendants()) do
+        highlightObject(obj)
+    end
+    
+    -- Monitor for new objects
+    local descendantAddedConnection = workspace.DescendantAdded:Connect(function(obj)
+        task.wait(0.1)
+        highlightObject(obj)
+    end)
+    
+    table.insert(espPartConnections, descendantAddedConnection)
+    
+    if foundCount > 0 then
+        createNotification("Highlighted " .. foundCount .. " objects matching '" .. partName .. "'", true)
+    else
+        createNotification("No objects found matching '" .. partName .. "'", false)
+    end
+end
+
+function disableESPPart()
+    -- Clean up all ESP part highlights
+    for _, obj in pairs(espPartObjects) do
+        if obj then
+            obj:Destroy()
+        end
+    end
+    espPartObjects = {}
+    
+    -- Disconnect all connections
+    for _, connection in pairs(espPartConnections) do
+        if connection then
+            connection:Disconnect()
+        end
+    end
+    espPartConnections = {}
 end
 
 function createNotification(message, isSuccess)
@@ -1634,12 +1794,16 @@ end
 spawn(function()
     while true do
         if isOpen then
-            if espEnabled then
+            local espPartCount = #espPartObjects / 2 -- Divide by 2 because we have highlights + billboards
+            
+            if #espPartObjects > 0 then
+                updateStatus("Status: Part ESP Active (" .. math.floor(espPartCount) .. " objects)", Color3.fromRGB(255, 0, 255))
+            elseif espEnabled then
                 local playerCount = 0
                 for _ in pairs(espObjects) do
                     playerCount = playerCount + 1
                 end
-                updateStatus("Status: ESP Active (" .. playerCount .. " players)", Color3.fromRGB(255, 0, 255))
+                updateStatus("Status: Player ESP Active (" .. playerCount .. " players)", Color3.fromRGB(255, 0, 255))
             elseif flyEnabled then
                 updateStatus("Status: Flying (Speed " .. flySpeed .. ")", Color3.fromRGB(0, 200, 255))
             elseif noclipEnabled then
@@ -1676,7 +1840,10 @@ local commandAliases = {
     ["√infyield"] = "√InfiniteYield",
     ["√infiniteyield"] = "√InfiniteYield",
     ["√iy"] = "√InfiniteYield",
-    ["√IY"] = "√InfiniteYield"
+    ["√IY"] = "√InfiniteYield",
+    ["√esppart"] = "√ESPPart",
+    ["√EspP"] = "√ESPPart",
+    ["√EPart"] = "√ESPPart"
 }
 
 local function resolveAlias(commandName)
@@ -1862,6 +2029,7 @@ ScreenGui.AncestryChanged:Connect(function()
         disableNoclip()
         disableFly()
         disableESP()
+        disableESPPart()
         if noclipConnection then
             noclipConnection:Disconnect()
         end
