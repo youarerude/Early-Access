@@ -28,13 +28,11 @@ local flySpeed = 1
 local flyBg = nil
 local flyBv = nil
 local flyControl = {f = 0, b = 0, l = 0, r = 0}
+local lastExecutedCommand = nil
+local lastExecutedValue = nil
 local espEnabled = false
 local espObjects = {}
 local espConnections = {}
-local lastExecutedCommand = nil
-local lastExecutedValue = nil
-local headsitSeat = nil
-local headsitConnection = nil
 
 -- Create ScreenGui
 local ScreenGui = Instance.new("ScreenGui")
@@ -353,6 +351,19 @@ local Commands = {
         end
     },
     {
+        name = "√PreviousCommand",
+        description = "Re-execute the previous command",
+        requiresValue = false,
+        func = function()
+            if lastExecutedCommand then
+                local success, message = lastExecutedCommand(lastExecutedValue)
+                return success, "Re-executed: " .. (message or "Previous command")
+            else
+                return false, "No previous command to execute"
+            end
+        end
+    },
+    {
         name = "√ESP",
         description = "Enable ESP for all players",
         requiresValue = false,
@@ -368,54 +379,6 @@ local Commands = {
         func = function()
             disableESP()
             return true, "ESP disabled"
-        end
-    },
-    {
-        name = "√PreviousCommand",
-        description = "Re-execute the previous command",
-        requiresValue = false,
-        func = function()
-            if lastExecutedCommand then
-                local commandData = nil
-                for _, cmd in ipairs(Commands) do
-                    if cmd.name == lastExecutedCommand then
-                        commandData = cmd
-                        break
-                    end
-                end
-                
-                if commandData and commandData.name ~= "√PreviousCommand" then
-                    local success, message = commandData.func(lastExecutedValue)
-                    return success, "Re-executed: " .. message
-                else
-                    return false, "No valid previous command found"
-                end
-            else
-                return false, "No previous command to execute"
-            end
-        end
-    },
-    {
-        name = "√Headsit",
-        description = "Sit on a player's head",
-        requiresValue = true,
-        valueType = "player",
-        func = function(value)
-            local targetPlayer = findPlayer(value)
-            if not targetPlayer then
-                return false, "Player not found"
-            end
-            
-            if not targetPlayer.Character or not targetPlayer.Character:FindFirstChild("Head") then
-                return false, "Player has no character or head"
-            end
-            
-            if not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("Humanoid") then
-                return false, "Your character not found"
-            end
-            
-            enableHeadsit(targetPlayer)
-            return true, "Sitting on " .. targetPlayer.DisplayName .. "'s head"
         end
     }
 }
@@ -694,193 +657,169 @@ function enableESP()
     
     espEnabled = true
     
-    -- Function to create ESP for a player
-    local function createESP(player)
+    local function createESPForPlayer(player)
         if player == LocalPlayer then return end
         
-        local function setupCharacterESP(character)
+        local function setupESP(character)
             if not espEnabled then return end
-            
-            -- Remove old ESP if exists
-            if espObjects[player.UserId] then
-                for _, obj in pairs(espObjects[player.UserId]) do
-                    if obj then obj:Destroy() end
+            if espObjects[player] then
+                -- Clean up old ESP
+                if espObjects[player].Highlight then
+                    espObjects[player].Highlight:Destroy()
+                end
+                if espObjects[player].BillboardGui then
+                    espObjects[player].BillboardGui:Destroy()
                 end
             end
             
-            espObjects[player.UserId] = {}
-            
-            local hrp = character:WaitForChild("HumanoidRootPart", 5)
+            local humanoidRootPart = character:WaitForChild("HumanoidRootPart", 5)
             local humanoid = character:WaitForChild("Humanoid", 5)
             
-            if not hrp or not humanoid then return end
+            if not humanoidRootPart or not humanoid then return end
             
             -- Create Highlight
             local highlight = Instance.new("Highlight")
             highlight.Name = "ESPHighlight"
-            highlight.FillColor = Color3.fromRGB(0, 150, 255)
-            highlight.OutlineColor = Color3.fromRGB(0, 255, 255)
+            highlight.Adornee = character
+            highlight.FillColor = Color3.fromRGB(0, 100, 255)
+            highlight.OutlineColor = Color3.fromRGB(0, 150, 255)
             highlight.FillTransparency = 0.5
             highlight.OutlineTransparency = 0
-            highlight.Adornee = character
             highlight.Parent = character
-            
-            table.insert(espObjects[player.UserId], highlight)
             
             -- Create BillboardGui
             local billboard = Instance.new("BillboardGui")
             billboard.Name = "ESPBillboard"
-            billboard.Adornee = hrp
-            billboard.Size = UDim2.new(0, 200, 0, 80)
+            billboard.Adornee = humanoidRootPart
+            billboard.Size = UDim2.new(0, 200, 0, 100)
             billboard.StudsOffset = Vector3.new(0, 3, 0)
             billboard.AlwaysOnTop = true
-            billboard.Parent = hrp
+            billboard.Parent = humanoidRootPart
             
-            local frame = Instance.new("Frame")
-            frame.Size = UDim2.new(1, 0, 1, 0)
-            frame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-            frame.BackgroundTransparency = 0.3
-            frame.BorderSizePixel = 0
-            frame.Parent = billboard
+            -- Create background frame
+            local bgFrame = Instance.new("Frame")
+            bgFrame.Size = UDim2.new(1, 0, 1, 0)
+            bgFrame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+            bgFrame.BackgroundTransparency = 0.5
+            bgFrame.BorderSizePixel = 0
+            bgFrame.Parent = billboard
             
-            local corner = Instance.new("UICorner")
-            corner.CornerRadius = UDim.new(0, 8)
-            corner.Parent = frame
+            local bgCorner = Instance.new("UICorner")
+            bgCorner.CornerRadius = UDim.new(0, 8)
+            bgCorner.Parent = bgFrame
             
-            local stroke = Instance.new("UIStroke")
-            stroke.Color = Color3.fromRGB(0, 150, 255)
-            stroke.Thickness = 2
-            stroke.Parent = frame
+            -- Create text label
+            local textLabel = Instance.new("TextLabel")
+            textLabel.Name = "InfoLabel"
+            textLabel.Size = UDim2.new(1, -10, 1, -10)
+            textLabel.Position = UDim2.new(0, 5, 0, 5)
+            textLabel.BackgroundTransparency = 1
+            textLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+            textLabel.TextSize = 14
+            textLabel.Font = Enum.Font.GothamBold
+            textLabel.TextWrapped = true
+            textLabel.TextYAlignment = Enum.TextYAlignment.Top
+            textLabel.Parent = bgFrame
             
-            -- Username label
-            local usernameLabel = Instance.new("TextLabel")
-            usernameLabel.Name = "Username"
-            usernameLabel.Size = UDim2.new(1, -10, 0, 20)
-            usernameLabel.Position = UDim2.new(0, 5, 0, 2)
-            usernameLabel.BackgroundTransparency = 1
-            usernameLabel.Text = player.Name
-            usernameLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-            usernameLabel.TextSize = 12
-            usernameLabel.Font = Enum.Font.GothamBold
-            usernameLabel.TextXAlignment = Enum.TextXAlignment.Center
-            usernameLabel.Parent = frame
+            espObjects[player] = {
+                Highlight = highlight,
+                BillboardGui = billboard,
+                TextLabel = textLabel,
+                Character = character,
+                Humanoid = humanoid,
+                HumanoidRootPart = humanoidRootPart
+            }
             
-            -- Display name label
-            local displayLabel = Instance.new("TextLabel")
-            displayLabel.Name = "DisplayName"
-            displayLabel.Size = UDim2.new(1, -10, 0, 18)
-            displayLabel.Position = UDim2.new(0, 5, 0, 20)
-            displayLabel.BackgroundTransparency = 1
-            displayLabel.Text = player.DisplayName
-            displayLabel.TextColor3 = Color3.fromRGB(0, 200, 255)
-            displayLabel.TextSize = 11
-            displayLabel.Font = Enum.Font.Gotham
-            displayLabel.TextXAlignment = Enum.TextXAlignment.Center
-            displayLabel.Parent = frame
-            
-            -- Health label
-            local healthLabel = Instance.new("TextLabel")
-            healthLabel.Name = "Health"
-            healthLabel.Size = UDim2.new(1, -10, 0, 18)
-            healthLabel.Position = UDim2.new(0, 5, 0, 38)
-            healthLabel.BackgroundTransparency = 1
-            healthLabel.Text = "HP: " .. math.floor(humanoid.Health)
-            healthLabel.TextColor3 = Color3.fromRGB(0, 255, 100)
-            healthLabel.TextSize = 11
-            healthLabel.Font = Enum.Font.Gotham
-            healthLabel.TextXAlignment = Enum.TextXAlignment.Center
-            healthLabel.Parent = frame
-            
-            -- Distance label
-            local distanceLabel = Instance.new("TextLabel")
-            distanceLabel.Name = "Distance"
-            distanceLabel.Size = UDim2.new(1, -10, 0, 18)
-            distanceLabel.Position = UDim2.new(0, 5, 0, 56)
-            distanceLabel.BackgroundTransparency = 1
-            distanceLabel.Text = "0 Studs"
-            distanceLabel.TextColor3 = Color3.fromRGB(255, 200, 0)
-            distanceLabel.TextSize = 11
-            distanceLabel.Font = Enum.Font.Gotham
-            distanceLabel.TextXAlignment = Enum.TextXAlignment.Center
-            distanceLabel.Parent = frame
-            
-            table.insert(espObjects[player.UserId], billboard)
-            
-            -- Update loop for health and distance
-            local updateConnection = RunService.Heartbeat:Connect(function()
-                if not espEnabled or not humanoid or not humanoid.Parent or not LocalPlayer.Character then
+            -- Update loop for this player
+            local updateConnection
+            updateConnection = RunService.Heartbeat:Connect(function()
+                if not espEnabled or not espObjects[player] or not character.Parent then
                     if updateConnection then
                         updateConnection:Disconnect()
                     end
                     return
                 end
                 
-                -- Update health
-                local currentHealth = math.floor(humanoid.Health)
-                healthLabel.Text = "HP: " .. currentHealth
-                
-                -- Update health color based on percentage
-                local healthPercent = humanoid.Health / humanoid.MaxHealth
-                if healthPercent > 0.5 then
-                    healthLabel.TextColor3 = Color3.fromRGB(0, 255, 100)
-                elseif healthPercent > 0.25 then
-                    healthLabel.TextColor3 = Color3.fromRGB(255, 255, 0)
-                else
-                    healthLabel.TextColor3 = Color3.fromRGB(255, 50, 50)
-                end
-                
-                -- Update distance
-                local myHRP = LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-                if myHRP and hrp then
-                    local distance = math.floor((myHRP.Position - hrp.Position).Magnitude)
-                    distanceLabel.Text = distance .. " Studs"
+                if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+                    local distance = (LocalPlayer.Character.HumanoidRootPart.Position - humanoidRootPart.Position).Magnitude
+                    local health = math.floor(humanoid.Health)
+                    local maxHealth = math.floor(humanoid.MaxHealth)
                     
-                    -- Update distance color based on range
-                    if distance < 50 then
-                        distanceLabel.TextColor3 = Color3.fromRGB(255, 50, 50)
-                    elseif distance < 150 then
-                        distanceLabel.TextColor3 = Color3.fromRGB(255, 200, 0)
+                    textLabel.Text = string.format(
+                        "%s\n%s\nHP: %d/%d\n%.1f Studs",
+                        player.Name,
+                        player.DisplayName,
+                        health,
+                        maxHealth,
+                        distance
+                    )
+                    
+                    -- Color based on health
+                    local healthPercent = health / maxHealth
+                    if healthPercent > 0.6 then
+                        highlight.FillColor = Color3.fromRGB(0, 255, 0)
+                        highlight.OutlineColor = Color3.fromRGB(0, 200, 0)
+                    elseif healthPercent > 0.3 then
+                        highlight.FillColor = Color3.fromRGB(255, 255, 0)
+                        highlight.OutlineColor = Color3.fromRGB(200, 200, 0)
                     else
-                        distanceLabel.TextColor3 = Color3.fromRGB(0, 255, 100)
+                        highlight.FillColor = Color3.fromRGB(255, 0, 0)
+                        highlight.OutlineColor = Color3.fromRGB(200, 0, 0)
                     end
                 end
-                
-                task.wait(0.1)
             end)
             
             table.insert(espConnections, updateConnection)
         end
         
         if player.Character then
-            setupCharacterESP(player.Character)
+            setupESP(player.Character)
         end
         
-        player.CharacterAdded:Connect(function(character)
+        local charAddedConnection = player.CharacterAdded:Connect(function(character)
             if espEnabled then
-                setupCharacterESP(character)
+                task.wait(0.5)
+                setupESP(character)
             end
         end)
+        
+        table.insert(espConnections, charAddedConnection)
     end
     
-    -- Create ESP for all current players
+    -- Setup ESP for all current players
     for _, player in pairs(Players:GetPlayers()) do
-        createESP(player)
+        createESPForPlayer(player)
     end
     
-    -- Create ESP for new players
+    -- Setup ESP for new players
     local playerAddedConnection = Players.PlayerAdded:Connect(function(player)
         if espEnabled then
-            createESP(player)
+            createESPForPlayer(player)
         end
     end)
     
     table.insert(espConnections, playerAddedConnection)
+    
+    -- Handle player removing
+    local playerRemovingConnection = Players.PlayerRemoving:Connect(function(player)
+        if espObjects[player] then
+            if espObjects[player].Highlight then
+                espObjects[player].Highlight:Destroy()
+            end
+            if espObjects[player].BillboardGui then
+                espObjects[player].BillboardGui:Destroy()
+            end
+            espObjects[player] = nil
+        end
+    end)
+    
+    table.insert(espConnections, playerRemovingConnection)
 end
 
 function disableESP()
     espEnabled = false
     
-    -- Disconnect all update connections
+    -- Disconnect all connections
     for _, connection in pairs(espConnections) do
         if connection then
             connection:Disconnect()
@@ -888,120 +827,16 @@ function disableESP()
     end
     espConnections = {}
     
-    -- Remove all ESP objects
-    for userId, objects in pairs(espObjects) do
-        for _, obj in pairs(objects) do
-            if obj then
-                obj:Destroy()
-            end
+    -- Clean up all ESP objects
+    for player, espData in pairs(espObjects) do
+        if espData.Highlight then
+            espData.Highlight:Destroy()
+        end
+        if espData.BillboardGui then
+            espData.BillboardGui:Destroy()
         end
     end
     espObjects = {}
-    
-    -- Remove any leftover highlights and billboards
-    for _, player in pairs(Players:GetPlayers()) do
-        if player.Character then
-            local highlight = player.Character:FindFirstChild("ESPHighlight")
-            if highlight then highlight:Destroy() end
-            
-            local hrp = player.Character:FindFirstChild("HumanoidRootPart")
-            if hrp then
-                local billboard = hrp:FindFirstChild("ESPBillboard")
-                if billboard then billboard:Destroy() end
-            end
-        end
-    end
-end
-
-function enableHeadsit(targetPlayer)
-    -- Clean up any existing headsit
-    if headsitSeat then
-        disableHeadsit()
-        task.wait(0.1)
-    end
-    
-    local targetCharacter = targetPlayer.Character
-    local targetHead = targetCharacter:FindFirstChild("Head")
-    
-    if not targetHead then
-        return
-    end
-    
-    -- Create invisible seat
-    headsitSeat = Instance.new("Seat")
-    headsitSeat.Name = "HeadsitSeat"
-    headsitSeat.Size = Vector3.new(2, 0.5, 2)
-    headsitSeat.Transparency = 1
-    headsitSeat.CanCollide = false
-    headsitSeat.Anchored = false
-    headsitSeat.CFrame = targetHead.CFrame * CFrame.new(0, 1.5, 0)
-    headsitSeat.Parent = workspace
-    
-    -- Make it completely invisible
-    headsitSeat.TopSurface = Enum.SurfaceType.Smooth
-    headsitSeat.BottomSurface = Enum.SurfaceType.Smooth
-    
-    -- Create a weld to attach seat to head
-    local weld = Instance.new("Weld")
-    weld.Name = "HeadsitWeld"
-    weld.Part0 = targetHead
-    weld.Part1 = headsitSeat
-    weld.C0 = CFrame.new(0, 1.5, 0)
-    weld.Parent = headsitSeat
-    
-    -- Teleport player to seat and sit
-    task.wait(0.1)
-    if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
-        LocalPlayer.Character.HumanoidRootPart.CFrame = headsitSeat.CFrame
-        task.wait(0.1)
-        
-        local humanoid = LocalPlayer.Character:FindFirstChild("Humanoid")
-        if humanoid then
-            headsitSeat:Sit(humanoid)
-        end
-    end
-    
-    -- Monitor when player gets up
-    headsitConnection = headsitSeat:GetPropertyChangedSignal("Occupant"):Connect(function()
-        if not headsitSeat.Occupant then
-            -- Player got up, remove seat
-            disableHeadsit()
-        end
-    end)
-    
-    -- Cleanup if target player leaves or dies
-    local targetHumanoid = targetCharacter:FindFirstChild("Humanoid")
-    if targetHumanoid then
-        local deathConnection
-        deathConnection = targetHumanoid.Died:Connect(function()
-            disableHeadsit()
-            if deathConnection then
-                deathConnection:Disconnect()
-            end
-        end)
-    end
-    
-    local leftConnection
-    leftConnection = targetPlayer.AncestryChanged:Connect(function()
-        if not targetPlayer:IsDescendantOf(game) then
-            disableHeadsit()
-            if leftConnection then
-                leftConnection:Disconnect()
-            end
-        end
-    end)
-end
-
-function disableHeadsit()
-    if headsitConnection then
-        headsitConnection:Disconnect()
-        headsitConnection = nil
-    end
-    
-    if headsitSeat then
-        headsitSeat:Destroy()
-        headsitSeat = nil
-    end
 end
 
 function createNotification(message, isSuccess)
@@ -1157,9 +992,9 @@ function executeCommand(commandData)
         return
     end
     
-    -- Store command for PreviousCommand functionality
+    -- Save last executed command (except PreviousCommand itself)
     if commandData.name ~= "√PreviousCommand" then
-        lastExecutedCommand = commandData.name
+        lastExecutedCommand = commandData.func
         lastExecutedValue = value
     end
     
@@ -1177,10 +1012,6 @@ function populateCommands(filterText)
         if child:IsA("Frame") then
             child:Destroy()
         end
-    end
-    
-    if not Commands then
-        return
     end
     
     local count = 0
@@ -1231,19 +1062,8 @@ function executeFromSearch(text)
     
     if not commandName then return end
     
-    if not Commands then
-        createNotification("Commands not loaded yet!", false)
-        return
-    end
-    
     for _, commandData in ipairs(Commands) do
         if commandData.name:lower() == commandName:lower() then
-            -- Store command for PreviousCommand functionality
-            if commandData.name ~= "√PreviousCommand" then
-                lastExecutedCommand = commandData.name
-                lastExecutedValue = value
-            end
-            
             if commandData.requiresValue and value and value ~= "" then
                 local success, message = commandData.func(value)
                 createNotification(message, success)
@@ -1496,13 +1316,6 @@ LocalPlayer.CharacterAdded:Connect(function(character)
         task.wait(0.5)
         enableFly(savedSpeed)
     end
-    
-    -- Re-enable ESP if it was enabled
-    if espEnabled then
-        disableESP()
-        task.wait(0.5)
-        enableESP()
-    end
 end)
 
 -- Handle mobile keyboard
@@ -1559,7 +1372,7 @@ ScreenGui:GetPropertyChangedSignal("AbsoluteSize"):Connect(updateGUISize)
 
 -- Additional command parsing for value input
 ValueInput.FocusLost:Connect(function(enterPressed)
-    if enterPressed and ValueInput.Text ~= "" and Commands then
+    if enterPressed and ValueInput.Text ~= "" then
         -- Auto-detect last searched command or first visible command
         local lastCommand = nil
         
@@ -1712,7 +1525,7 @@ spawn(function()
                 for _ in pairs(espObjects) do
                     playerCount = playerCount + 1
                 end
-                updateStatus("Status: ESP Active (" .. playerCount .. " players)", Color3.fromRGB(255, 100, 255))
+                updateStatus("Status: ESP Active (" .. playerCount .. " players)", Color3.fromRGB(255, 0, 255))
             elseif flyEnabled then
                 updateStatus("Status: Flying (Speed " .. flySpeed .. ")", Color3.fromRGB(0, 200, 255))
             elseif noclipEnabled then
@@ -1740,9 +1553,9 @@ local commandAliases = {
     ["√prev"] = "√PreviousCommand",
     ["√last"] = "√PreviousCommand",
     ["√again"] = "√PreviousCommand",
+    ["√wallhack"] = "√ESP",
     ["√unesp"] = "√UnESP",
-    ["√sit"] = "√Headsit",
-    ["√headstand"] = "√Headsit"
+    ["√unwallhack"] = "√UnESP"
 }
 
 local function resolveAlias(commandName)
@@ -1928,7 +1741,6 @@ ScreenGui.AncestryChanged:Connect(function()
         disableNoclip()
         disableFly()
         disableESP()
-        disableHeadsit()
         if noclipConnection then
             noclipConnection:Disconnect()
         end
