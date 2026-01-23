@@ -911,8 +911,19 @@ function headsitPlayer(value)
     headsitSeat.Transparency = 1
     headsitSeat.CanCollide = false
     headsitSeat.Anchored = true
+    headsitSeat.Massless = true
     headsitSeat.CFrame = targetHead.CFrame * CFrame.new(0, 1.5, 0)
     headsitSeat.Parent = workspace
+    
+    -- Teleport player to seat BEFORE starting the update loop
+    task.wait(0.1)
+    LocalPlayer.Character.HumanoidRootPart.CFrame = headsitSeat.CFrame
+    task.wait(0.1)
+    
+    local humanoid = LocalPlayer.Character:FindFirstChild("Humanoid")
+    if humanoid then
+        humanoid.Sit = true
+    end
     
     -- Make seat follow the target's head
     headsitConnection = RunService.Heartbeat:Connect(function()
@@ -924,7 +935,13 @@ function headsitPlayer(value)
             return
         end
         
+        -- Ensure seat stays anchored
+        if not headsitSeat.Anchored then
+            headsitSeat.Anchored = true
+        end
+        
         if targetPlayer.Character and targetPlayer.Character:FindFirstChild("Head") then
+            -- Update seat position to follow head
             headsitSeat.CFrame = targetPlayer.Character.Head.CFrame * CFrame.new(0, 1.5, 0)
         else
             -- Target player died or left, clean up
@@ -938,16 +955,6 @@ function headsitPlayer(value)
             end
         end
     end)
-    
-    -- Teleport player to seat and make them sit
-    task.wait(0.1)
-    LocalPlayer.Character.HumanoidRootPart.CFrame = headsitSeat.CFrame
-    task.wait(0.1)
-    
-    local humanoid = LocalPlayer.Character:FindFirstChild("Humanoid")
-    if humanoid then
-        humanoid.Sit = true
-    end
     
     return true, "Now sitting on " .. targetPlayer.DisplayName .. "'s head"
 end
