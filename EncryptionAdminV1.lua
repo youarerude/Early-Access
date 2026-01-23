@@ -35,9 +35,6 @@ local espObjects = {}
 local espConnections = {}
 local headsitSeat = nil
 local headsitConnection = nil
-local espPartEnabled = false
-local espPartObjects = {}
-local espPartConnection = nil
 
 -- Create ScreenGui
 local ScreenGui = Instance.new("ScreenGui")
@@ -403,7 +400,21 @@ local Commands = {
         requiresValue = true,
         valueType = "player",
         func = function(value)
-            return headsitPlayer(value)
+            local targetPlayer = findPlayer(value)
+            if not targetPlayer then
+                return false, "Player not found"
+            end
+            
+            if not targetPlayer.Character or not targetPlayer.Character:FindFirstChild("Head") then
+                return false, "Player has no character or head"
+            end
+            
+            if not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("Humanoid") then
+                return false, "Your character not found"
+            end
+            
+            enableHeadsit(targetPlayer)
+            return true, "Now sitting on " .. targetPlayer.DisplayName .. "'s head"
         end
     },
     {
@@ -421,26 +432,6 @@ local Commands = {
             else
                 return false, "Failed to load Infinite Yield: " .. tostring(err)
             end
-        end
-    },
-    {
-        name = "√ESPPart",
-        aliases = "√esppart, √EspP, √EPart",
-        description = "ESP/highlight parts by name",
-        requiresValue = true,
-        valueType = "string",
-        func = function(value)
-            return enableESPPart(value)
-        end
-    },
-    {
-        name = "√UnESPPart",
-        aliases = "√unesppart, √UnEspP, √UEPart",
-        description = "Disable part ESP",
-        requiresValue = false,
-        func = function()
-            disableESPPart()
-            return true, "Part ESP disabled"
         end
     }
 }
@@ -901,63 +892,39 @@ function disableESP()
     espObjects = {}
 end
 
-function headsitPlayer(value)
+function enableHeadsit(targetPlayer)
     -- Clean up existing headsit
     if headsitSeat then
         headsitSeat:Destroy()
         headsitSeat = nil
     end
+    
     if headsitConnection then
         headsitConnection:Disconnect()
         headsitConnection = nil
     end
     
-    if not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
-        return false, "Your character not found"
-    end
-    
-    local targetPlayer = findPlayer(value)
-    if not targetPlayer then
-        return false, "Player not found"
-    end
-    
     if not targetPlayer.Character or not targetPlayer.Character:FindFirstChild("Head") then
-        return false, "Target player has no character or head"
+        return
     end
     
     local targetHead = targetPlayer.Character.Head
     
     -- Create invisible seat
-    headsitSeat = Instance.new("Seat")
-    headsitSeat.Name = "HeadsitSeat"
-    headsitSeat.Size = Vector3.new(2, 0.5, 2)
-    headsitSeat.Transparency = 1
-    headsitSeat.CanCollide = false
-    headsitSeat.Anchored = true
-    headsitSeat.Massless = true
-    headsitSeat.CFrame = targetHead.CFrame * CFrame.new(0, 1.5, 0)
-    headsitSeat.Parent = workspace
+    local seat = Instance.new("Seat")
+    seat.Name = "HeadsitSeat"
+    seat.Size = Vector3.new(2, 0.5, 2)
+    seat.Transparency = 1
+    seat.CanCollide = false
+    seat.Anchored = true
+    seat.CFrame = targetHead.CFrame * CFrame.new(0, 1.5, 0)
+    seat.Parent = workspace
     
-    -- Make seat follow the target's head with update loop FIRST
+    headsitSeat = seat
+    
+    -- Make the seat follow the player's head
     headsitConnection = RunService.Heartbeat:Connect(function()
-        if not headsitSeat or not headsitSeat.Parent then
-            if headsitConnection then
-                headsitConnection:Disconnect()
-                headsitConnection = nil
-            end
-            return
-        end
-        
-        -- Ensure seat stays anchored
-        if not headsitSeat.Anchored then
-            headsitSeat.Anchored = true
-        end
-        
-        if targetPlayer.Character and targetPlayer.Character:FindFirstChild("Head") then
-            -- Update seat position to follow head
-            headsitSeat.CFrame = targetPlayer.Character.Head.CFrame * CFrame.new(0, 1.5, 0)
-        else
-            -- Target player died or left, clean up
+        if not targetPlayer.Character or not targetPlayer.Character:FindFirstChild("Head") then
             if headsitSeat then
                 headsitSeat:Destroy()
                 headsitSeat = nil
@@ -966,140 +933,39 @@ function headsitPlayer(value)
                 headsitConnection:Disconnect()
                 headsitConnection = nil
             end
+            return
+        end
+        
+        if headsitSeat then
+            headsitSeat.CFrame = targetPlayer.Character.Head.CFrame * CFrame.new(0, 1.5, 0)
         end
     end)
     
-    -- THEN teleport player to seat and make them sit
-    task.wait(0.2)
+    -- Teleport player to seat and sit
+    task.wait(0.1)
     if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
-        LocalPlayer.Character.HumanoidRootPart.CFrame = headsitSeat.CFrame
+        LocalPlayer.Character.HumanoidRootPart.CFrame = seat.CFrame
         task.wait(0.1)
         
-        local humanoid = LocalPlayer.Character:FindFirstChild("Humanoid")
+        local humanoid = LocalPlayer.Character:FindFirstChildWhichIsA("Humanoid")
         if humanoid then
-            humanoid.Sit = true
+            seat:Sit(humanoid)
         end
     end
     
-    return true, "Now sitting on " .. targetPlayer.DisplayName .. "'s head"
-end
-
-function enableESPPart(partName)
-    if espPartEnabled then
-        disableESPPart()
-        task.wait(0.1)
-    end
-    
-    espPartEnabled = true
-    local searchName = partName:lower()
-    local foundCount = 0
-    
-    local function highlightPart(part)
-        if espPartObjects[part] then return end
-        
-        -- Create Highlight
-        local highlight = Instance.new("Highlight")
-        highlight.Name = "ESPPartHighlight"
-        highlight.Adornee = part
-        highlight.FillColor = Color3.fromRGB(255, 255, 0)
-        highlight.OutlineColor = Color3.fromRGB(255, 200, 0)
-        highlight.FillTransparency = 0.5
-        highlight.OutlineTransparency = 0
-        highlight.Parent = part
-        
-        -- Create BillboardGui
-        local billboard = Instance.new("BillboardGui")
-        billboard.Name = "ESPPartBillboard"
-        billboard.Adornee = part
-        billboard.Size = UDim2.new(0, 150, 0, 50)
-        billboard.StudsOffset = Vector3.new(0, 2, 0)
-        billboard.AlwaysOnTop = true
-        billboard.Parent = part
-        
-        -- Create background frame
-        local bgFrame = Instance.new("Frame")
-        bgFrame.Size = UDim2.new(1, 0, 1, 0)
-        bgFrame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-        bgFrame.BackgroundTransparency = 0.5
-        bgFrame.BorderSizePixel = 0
-        bgFrame.Parent = billboard
-        
-        local bgCorner = Instance.new("UICorner")
-        bgCorner.CornerRadius = UDim.new(0, 8)
-        bgCorner.Parent = bgFrame
-        
-        -- Create text label
-        local textLabel = Instance.new("TextLabel")
-        textLabel.Size = UDim2.new(1, -10, 1, -10)
-        textLabel.Position = UDim2.new(0, 5, 0, 5)
-        textLabel.BackgroundTransparency = 1
-        textLabel.TextColor3 = Color3.fromRGB(255, 255, 0)
-        textLabel.TextSize = 14
-        textLabel.Font = Enum.Font.GothamBold
-        textLabel.TextWrapped = true
-        textLabel.Text = part.Name
-        textLabel.Parent = bgFrame
-        
-        espPartObjects[part] = {
-            Highlight = highlight,
-            BillboardGui = billboard,
-            Part = part
-        }
-        
-        foundCount = foundCount + 1
-    end
-    
-    local function searchParts(parent)
-        for _, obj in pairs(parent:GetDescendants()) do
-            if espPartEnabled and obj:IsA("BasePart") then
-                local objNameLower = obj.Name:lower()
-                if objNameLower:find(searchName, 1, true) then
-                    highlightPart(obj)
-                end
-            end
+    -- Cleanup when target player leaves or dies
+    local cleanup = targetPlayer.CharacterRemoving:Connect(function()
+        if headsitSeat then
+            headsitSeat:Destroy()
+            headsitSeat = nil
         end
-    end
-    
-    -- Search in workspace
-    searchParts(workspace)
-    
-    -- Monitor for new parts
-    espPartConnection = workspace.DescendantAdded:Connect(function(obj)
-        if not espPartEnabled then return end
-        if obj:IsA("BasePart") then
-            local objNameLower = obj.Name:lower()
-            if objNameLower:find(searchName, 1, true) then
-                task.wait(0.1)
-                highlightPart(obj)
-            end
+        if headsitConnection then
+            headsitConnection:Disconnect()
+            headsitConnection = nil
         end
     end)
     
-    if foundCount > 0 then
-        return true, "ESP enabled for " .. foundCount .. " parts matching '" .. partName .. "'"
-    else
-        disableESPPart()
-        return false, "No parts found matching '" .. partName .. "'"
-    end
-end
-
-function disableESPPart()
-    espPartEnabled = false
-    
-    if espPartConnection then
-        espPartConnection:Disconnect()
-        espPartConnection = nil
-    end
-    
-    for part, espData in pairs(espPartObjects) do
-        if espData.Highlight then
-            espData.Highlight:Destroy()
-        end
-        if espData.BillboardGui then
-            espData.BillboardGui:Destroy()
-        end
-    end
-    espPartObjects = {}
+    table.insert(espConnections, cleanup)
 end
 
 function createNotification(message, isSuccess)
@@ -1190,7 +1056,7 @@ function createCommandButton(commandData, index)
         AliasLabel.Position = UDim2.new(0, 10, 0, yOffset)
         AliasLabel.BackgroundTransparency = 1
         AliasLabel.Text = "Alias: " .. commandData.aliases
-        AliasLabel.TextColor3 = Color3.fromRGB(100, 100, 100)
+        AliasLabel.TextColor3 = Color3.fromRGB(100, 150, 200)
         AliasLabel.TextSize = 11
         AliasLabel.Font = Enum.Font.Gotham
         AliasLabel.TextXAlignment = Enum.TextXAlignment.Left
@@ -1308,15 +1174,17 @@ function populateCommands(filterText)
             local commandDescLower = commandData.description:lower()
             local aliasLower = commandData.aliases and commandData.aliases:lower() or ""
             
-            if not (commandNameLower:find(filterText, 1, true) or commandDescLower:find(filterText, 1, true) or aliasLower:find(filterText, 1, true)) then
+            if not (commandNameLower:find(filterText, 1, true) or 
+                    commandDescLower:find(filterText, 1, true) or
+                    aliasLower:find(filterText, 1, true)) then
                 shouldShow = false
             end
         end
         
         if shouldShow then
-            local cmdFrame = createCommandButton(commandData, index)
-            totalHeight = totalHeight + cmdFrame.Size.Y.Offset + 5
+            createCommandButton(commandData, index)
             count = count + 1
+            totalHeight = totalHeight + (commandData.aliases and 85 or 65)
         end
     end
     
@@ -1601,16 +1469,6 @@ LocalPlayer.CharacterAdded:Connect(function(character)
         task.wait(0.5)
         enableFly(savedSpeed)
     end
-    
-    -- Clean up headsit on respawn
-    if headsitSeat then
-        headsitSeat:Destroy()
-        headsitSeat = nil
-    end
-    if headsitConnection then
-        headsitConnection:Disconnect()
-        headsitConnection = nil
-    end
 end)
 
 -- Handle mobile keyboard
@@ -1815,13 +1673,7 @@ end
 spawn(function()
     while true do
         if isOpen then
-            if espPartEnabled then
-                local partCount = 0
-                for _ in pairs(espPartObjects) do
-                    partCount = partCount + 1
-                end
-                updateStatus("Status: Part ESP Active (" .. partCount .. " parts)", Color3.fromRGB(255, 255, 0))
-            elseif espEnabled then
+            if espEnabled then
                 local playerCount = 0
                 for _ in pairs(espObjects) do
                     playerCount = playerCount + 1
@@ -1856,20 +1708,7 @@ local commandAliases = {
     ["√again"] = "√PreviousCommand",
     ["√wallhack"] = "√ESP",
     ["√unesp"] = "√UnESP",
-    ["√unwallhack"] = "√UnESP",
-    ["√hsit"] = "√Headsit",
-    ["√headt"] = "√Headsit",
-    ["√hs"] = "√Headsit",
-    ["√infyield"] = "√InfiniteYield",
-    ["√infiniteyield"] = "√InfiniteYield",
-    ["√iy"] = "√InfiniteYield",
-    ["√IY"] = "√InfiniteYield",
-    ["√esppart"] = "√ESPPart",
-    ["√EspP"] = "√ESPPart",
-    ["√EPart"] = "√ESPPart",
-    ["√unesppart"] = "√UnESPPart",
-    ["√UnEspP"] = "√UnESPPart",
-    ["√UEPart"] = "√UnESPPart"
+    ["√unwallhack"] = "√UnESP"
 }
 
 local function resolveAlias(commandName)
@@ -2055,15 +1894,15 @@ ScreenGui.AncestryChanged:Connect(function()
         disableNoclip()
         disableFly()
         disableESP()
-        disableESPPart()
-        if noclipConnection then
-            noclipConnection:Disconnect()
-        end
+        
         if headsitSeat then
             headsitSeat:Destroy()
         end
         if headsitConnection then
             headsitConnection:Disconnect()
+        end
+        if noclipConnection then
+            noclipConnection:Disconnect()
         end
     end
 end)
