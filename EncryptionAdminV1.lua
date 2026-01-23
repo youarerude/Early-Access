@@ -35,6 +35,8 @@ local espObjects = {}
 local espConnections = {}
 local espPartObjects = {}
 local espPartConnections = {}
+local invisibilityEnabled = false
+local invisChair = nil
 
 -- Create ScreenGui
 local ScreenGui = Instance.new("ScreenGui")
@@ -406,6 +408,56 @@ local Commands = {
             
             enableESPPart(value)
             return true, "ESP enabled for: " .. value
+        end
+    },
+    {
+        name = "√UnESPPart",
+        aliases = "√unespp, √UEP, √Unsp, √unesppart",
+        description = "Disable ESP for specific parts",
+        requiresValue = true,
+        valueType = "string",
+        func = function(value)
+            if not value or value == "" then
+                return false, "Please specify a part or model name"
+            end
+            
+            local count = disableSpecificESPPart(value)
+            if count > 0 then
+                return true, "Removed ESP from " .. count .. " objects matching '" .. value .. "'"
+            else
+                return false, "No ESP objects found matching '" .. value .. "'"
+            end
+        end
+    },
+    {
+        name = "√UnESPAllPart",
+        aliases = "√UEAP, √unespallpart, √Unespap",
+        description = "Disable all part ESP",
+        requiresValue = false,
+        func = function()
+            local count = #espPartObjects
+            disableESPPart()
+            return true, "Disabled ESP for all " .. count .. " objects"
+        end
+    },
+    {
+        name = "√Invisible",
+        aliases = "√invisible, √Invis",
+        description = "Make yourself invisible",
+        requiresValue = false,
+        func = function()
+            enableInvisibility()
+            return true, "Invisibility enabled"
+        end
+    },
+    {
+        name = "√UnInvisible",
+        aliases = "√uninvisible, √Visible, √Vis",
+        description = "Disable invisibility",
+        requiresValue = false,
+        func = function()
+            disableInvisibility()
+            return true, "Invisibility disabled"
         end
     },
     {
@@ -1097,6 +1149,107 @@ function disableESPPart()
     espPartConnections = {}
 end
 
+function disableSpecificESPPart(partName)
+    local searchName = partName:lower()
+    local removedCount = 0
+    local objectsToKeep = {}
+    
+    for i, obj in pairs(espPartObjects) do
+        if obj and obj.Parent then
+            -- Check if this object matches the name to remove
+            local adornee = obj.Adornee or obj:FindFirstAncestorOfClass("Model") or obj.Parent
+            
+            if adornee and adornee.Name:lower():find(searchName, 1, true) then
+                obj:Destroy()
+                removedCount = removedCount + 1
+            else
+                table.insert(objectsToKeep, obj)
+            end
+        end
+    end
+    
+    espPartObjects = objectsToKeep
+    return removedCount
+end
+
+function enableInvisibility()
+    if invisibilityEnabled then
+        return
+    end
+    
+    invisibilityEnabled = true
+    
+    if not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+        invisibilityEnabled = false
+        return
+    end
+    
+    local savedpos = LocalPlayer.Character.HumanoidRootPart.CFrame
+    task.wait()
+    LocalPlayer.Character:MoveTo(Vector3.new(-25.95, 84, 3537.55))
+    task.wait(0.15)
+    
+    invisChair = Instance.new('Seat', workspace)
+    invisChair.Anchored = false
+    invisChair.CanCollide = false
+    invisChair.Name = 'EncryptionInvisChair'
+    invisChair.Transparency = 1
+    invisChair.Position = Vector3.new(-25.95, 84, 3537.55)
+    
+    local Weld = Instance.new("Weld", invisChair)
+    Weld.Part0 = invisChair
+    Weld.Part1 = LocalPlayer.Character:FindFirstChild("Torso") or LocalPlayer.Character:FindFirstChild("UpperTorso")
+    
+    task.wait()
+    invisChair.CFrame = savedpos
+    
+    -- Set transparency
+    for _, part in pairs(LocalPlayer.Character:GetDescendants()) do
+        if part:IsA("BasePart") or part:IsA("Decal") then
+            part.Transparency = 0.5
+        end
+    end
+end
+
+function disableInvisibility()
+    if not invisibilityEnabled then
+        return
+    end
+    
+    invisibilityEnabled = false
+    
+    -- Remove invisible chair
+    if invisChair then
+        invisChair:Destroy()
+        invisChair = nil
+    end
+    
+    -- Also check workspace for the chair
+    local chairInWorkspace = workspace:FindFirstChild('EncryptionInvisChair')
+    if chairInWorkspace then
+        chairInWorkspace:Destroy()
+    end
+    
+    -- Reset transparency
+    if LocalPlayer.Character then
+        for _, part in pairs(LocalPlayer.Character:GetDescendants()) do
+            if part:IsA("BasePart") or part:IsA("Decal") then
+                part.Transparency = 0
+            end
+        end
+        
+        -- Fix head transparency
+        local head = LocalPlayer.Character:FindFirstChild("Head")
+        if head then
+            head.Transparency = 0
+            local face = head:FindFirstChild("face")
+            if face then
+                face.Transparency = 0
+            end
+        end
+    end
+end
+
 function createNotification(message, isSuccess)
     local NotifFrame = Instance.new("Frame")
     NotifFrame.Size = UDim2.new(0, 250, 0, 60)
@@ -1590,6 +1743,13 @@ LocalPlayer.CharacterAdded:Connect(function(character)
         task.wait(0.5)
         enableFly(savedSpeed)
     end
+    
+    -- Re-enable invisibility if it was enabled
+    if invisibilityEnabled then
+        disableInvisibility()
+        task.wait(0.5)
+        enableInvisibility()
+    end
 end)
 
 -- Handle mobile keyboard
@@ -1796,7 +1956,9 @@ spawn(function()
         if isOpen then
             local espPartCount = #espPartObjects / 2 -- Divide by 2 because we have highlights + billboards
             
-            if #espPartObjects > 0 then
+            if invisibilityEnabled then
+                updateStatus("Status: Invisible Mode Active", Color3.fromRGB(150, 150, 150))
+            elseif #espPartObjects > 0 then
                 updateStatus("Status: Part ESP Active (" .. math.floor(espPartCount) .. " objects)", Color3.fromRGB(255, 0, 255))
             elseif espEnabled then
                 local playerCount = 0
@@ -1843,7 +2005,19 @@ local commandAliases = {
     ["√IY"] = "√InfiniteYield",
     ["√esppart"] = "√ESPPart",
     ["√EspP"] = "√ESPPart",
-    ["√EPart"] = "√ESPPart"
+    ["√EPart"] = "√ESPPart",
+    ["√unespp"] = "√UnESPPart",
+    ["√UEP"] = "√UnESPPart",
+    ["√Unsp"] = "√UnESPPart",
+    ["√unesppart"] = "√UnESPPart",
+    ["√UEAP"] = "√UnESPAllPart",
+    ["√unespallpart"] = "√UnESPAllPart",
+    ["√Unespap"] = "√UnESPAllPart",
+    ["√invisible"] = "√Invisible",
+    ["√Invis"] = "√Invisible",
+    ["√uninvisible"] = "√UnInvisible",
+    ["√Visible"] = "√UnInvisible",
+    ["√Vis"] = "√UnInvisible"
 }
 
 local function resolveAlias(commandName)
@@ -2030,6 +2204,7 @@ ScreenGui.AncestryChanged:Connect(function()
         disableFly()
         disableESP()
         disableESPPart()
+        disableInvisibility()
         if noclipConnection then
             noclipConnection:Disconnect()
         end
