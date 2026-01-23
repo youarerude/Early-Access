@@ -33,8 +33,6 @@ local lastExecutedValue = nil
 local espEnabled = false
 local espObjects = {}
 local espConnections = {}
-local headsitSeat = nil
-local headsitConnection = nil
 
 -- Create ScreenGui
 local ScreenGui = Instance.new("ScreenGui")
@@ -400,21 +398,43 @@ local Commands = {
         requiresValue = true,
         valueType = "player",
         func = function(value)
-            local targetPlayer = findPlayer(value)
-            if not targetPlayer then
-                return false, "Player not found"
-            end
-            
-            if not targetPlayer.Character or not targetPlayer.Character:FindFirstChild("Head") then
-                return false, "Player has no character or head"
-            end
-            
-            if not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("Humanoid") then
+            if not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
                 return false, "Your character not found"
             end
             
-            enableHeadsit(targetPlayer)
-            return true, "Now sitting on " .. targetPlayer.DisplayName .. "'s head"
+            local targetPlayer = findPlayer(value)
+            if not targetPlayer or not targetPlayer.Character then
+                return false, "Player not found or has no character"
+            end
+            
+            local targetHead = targetPlayer.Character:FindFirstChild("Head")
+            if not targetHead then
+                return false, "Player has no head"
+            end
+            
+            -- Create seat on player's head
+            local seat = Instance.new("Seat")
+            seat.Name = "HeadSeat"
+            seat.Size = Vector3.new(2, 0.5, 2)
+            seat.Transparency = 1
+            seat.CanCollide = false
+            seat.Anchored = false
+            seat.Parent = workspace
+            
+            -- Create weld to attach seat to head
+            local weld = Instance.new("Weld")
+            weld.Part0 = targetHead
+            weld.Part1 = seat
+            weld.C0 = CFrame.new(0, 1.5, 0)
+            weld.Parent = seat
+            
+            -- Teleport and sit
+            task.wait(0.1)
+            LocalPlayer.Character.HumanoidRootPart.CFrame = seat.CFrame
+            task.wait(0.1)
+            seat:Sit(LocalPlayer.Character.Humanoid)
+            
+            return true, "Sitting on " .. targetPlayer.DisplayName .. "'s head"
         end
     },
     {
@@ -892,82 +912,6 @@ function disableESP()
     espObjects = {}
 end
 
-function enableHeadsit(targetPlayer)
-    -- Clean up existing headsit
-    if headsitSeat then
-        headsitSeat:Destroy()
-        headsitSeat = nil
-    end
-    
-    if headsitConnection then
-        headsitConnection:Disconnect()
-        headsitConnection = nil
-    end
-    
-    if not targetPlayer.Character or not targetPlayer.Character:FindFirstChild("Head") then
-        return
-    end
-    
-    local targetHead = targetPlayer.Character.Head
-    
-    -- Create invisible seat
-    local seat = Instance.new("Seat")
-    seat.Name = "HeadsitSeat"
-    seat.Size = Vector3.new(2, 0.5, 2)
-    seat.Transparency = 1
-    seat.CanCollide = false
-    seat.Anchored = true
-    seat.CFrame = targetHead.CFrame * CFrame.new(0, 1.5, 0)
-    seat.Parent = workspace
-    
-    headsitSeat = seat
-    
-    -- Make the seat follow the player's head
-    headsitConnection = RunService.Heartbeat:Connect(function()
-        if not targetPlayer.Character or not targetPlayer.Character:FindFirstChild("Head") then
-            if headsitSeat then
-                headsitSeat:Destroy()
-                headsitSeat = nil
-            end
-            if headsitConnection then
-                headsitConnection:Disconnect()
-                headsitConnection = nil
-            end
-            return
-        end
-        
-        if headsitSeat then
-            headsitSeat.CFrame = targetPlayer.Character.Head.CFrame * CFrame.new(0, 1.5, 0)
-        end
-    end)
-    
-    -- Teleport player to seat and sit
-    task.wait(0.1)
-    if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
-        LocalPlayer.Character.HumanoidRootPart.CFrame = seat.CFrame
-        task.wait(0.1)
-        
-        local humanoid = LocalPlayer.Character:FindFirstChildWhichIsA("Humanoid")
-        if humanoid then
-            seat:Sit(humanoid)
-        end
-    end
-    
-    -- Cleanup when target player leaves or dies
-    local cleanup = targetPlayer.CharacterRemoving:Connect(function()
-        if headsitSeat then
-            headsitSeat:Destroy()
-            headsitSeat = nil
-        end
-        if headsitConnection then
-            headsitConnection:Disconnect()
-            headsitConnection = nil
-        end
-    end)
-    
-    table.insert(espConnections, cleanup)
-end
-
 function createNotification(message, isSuccess)
     local NotifFrame = Instance.new("Frame")
     NotifFrame.Size = UDim2.new(0, 250, 0, 60)
@@ -1019,7 +963,7 @@ end
 function createCommandButton(commandData, index)
     local CommandFrame = Instance.new("Frame")
     CommandFrame.Name = "Command_" .. index
-    CommandFrame.Size = UDim2.new(1, -10, 0, commandData.aliases and 80 or 60)
+    CommandFrame.Size = UDim2.new(1, -10, 0, 80)
     CommandFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
     CommandFrame.BorderSizePixel = 0
     CommandFrame.Parent = ScrollFrame
@@ -1046,29 +990,23 @@ function createCommandButton(commandData, index)
     CommandName.TextXAlignment = Enum.TextXAlignment.Left
     CommandName.Parent = CommandFrame
     
-    local yOffset = 25
-    
-    -- Add aliases if they exist
-    if commandData.aliases then
-        local AliasLabel = Instance.new("TextLabel")
-        AliasLabel.Name = "AliasLabel"
-        AliasLabel.Size = UDim2.new(1, -70, 0, 15)
-        AliasLabel.Position = UDim2.new(0, 10, 0, yOffset)
-        AliasLabel.BackgroundTransparency = 1
-        AliasLabel.Text = "Alias: " .. commandData.aliases
-        AliasLabel.TextColor3 = Color3.fromRGB(100, 150, 200)
-        AliasLabel.TextSize = 11
-        AliasLabel.Font = Enum.Font.Gotham
-        AliasLabel.TextXAlignment = Enum.TextXAlignment.Left
-        AliasLabel.Parent = CommandFrame
-        
-        yOffset = yOffset + 15
-    end
+    -- Add aliases display
+    local AliasLabel = Instance.new("TextLabel")
+    AliasLabel.Name = "AliasLabel"
+    AliasLabel.Size = UDim2.new(1, -70, 0, 15)
+    AliasLabel.Position = UDim2.new(0, 10, 0, 23)
+    AliasLabel.BackgroundTransparency = 1
+    AliasLabel.Text = commandData.aliases or ""
+    AliasLabel.TextColor3 = Color3.fromRGB(100, 100, 100)
+    AliasLabel.TextSize = 11
+    AliasLabel.Font = Enum.Font.Gotham
+    AliasLabel.TextXAlignment = Enum.TextXAlignment.Left
+    AliasLabel.Parent = CommandFrame
     
     local CommandDesc = Instance.new("TextLabel")
     CommandDesc.Name = "CommandDesc"
-    CommandDesc.Size = UDim2.new(1, -70, 0, commandData.aliases and 25 or 30)
-    CommandDesc.Position = UDim2.new(0, 10, 0, yOffset)
+    CommandDesc.Size = UDim2.new(1, -70, 0, 35)
+    CommandDesc.Position = UDim2.new(0, 10, 0, 40)
     CommandDesc.BackgroundTransparency = 1
     CommandDesc.Text = commandData.description
     CommandDesc.TextColor3 = Color3.fromRGB(150, 150, 150)
@@ -1163,7 +1101,6 @@ function populateCommands(filterText)
     end
     
     local count = 0
-    local totalHeight = 0
     filterText = filterText and filterText:lower() or ""
     
     for index, commandData in ipairs(Commands) do
@@ -1172,11 +1109,11 @@ function populateCommands(filterText)
         if filterText ~= "" then
             local commandNameLower = commandData.name:lower()
             local commandDescLower = commandData.description:lower()
-            local aliasLower = commandData.aliases and commandData.aliases:lower() or ""
+            local aliasesLower = (commandData.aliases or ""):lower()
             
             if not (commandNameLower:find(filterText, 1, true) or 
                     commandDescLower:find(filterText, 1, true) or
-                    aliasLower:find(filterText, 1, true)) then
+                    aliasesLower:find(filterText, 1, true)) then
                 shouldShow = false
             end
         end
@@ -1184,12 +1121,11 @@ function populateCommands(filterText)
         if shouldShow then
             createCommandButton(commandData, index)
             count = count + 1
-            totalHeight = totalHeight + (commandData.aliases and 85 or 65)
         end
     end
     
-    -- Update canvas size
-    ScrollFrame.CanvasSize = UDim2.new(0, 0, 0, totalHeight + 10)
+    -- Update canvas size (increased from 65 to 85 for taller frames with aliases)
+    ScrollFrame.CanvasSize = UDim2.new(0, 0, 0, count * 85 + 10)
 end
 
 function parseCommand(text)
@@ -1708,7 +1644,14 @@ local commandAliases = {
     ["√again"] = "√PreviousCommand",
     ["√wallhack"] = "√ESP",
     ["√unesp"] = "√UnESP",
-    ["√unwallhack"] = "√UnESP"
+    ["√unwallhack"] = "√UnESP",
+    ["√hsit"] = "√Headsit",
+    ["√headt"] = "√Headsit",
+    ["√hs"] = "√Headsit",
+    ["√infyield"] = "√InfiniteYield",
+    ["√infiniteyield"] = "√InfiniteYield",
+    ["√iy"] = "√InfiniteYield",
+    ["√IY"] = "√InfiniteYield"
 }
 
 local function resolveAlias(commandName)
@@ -1894,13 +1837,6 @@ ScreenGui.AncestryChanged:Connect(function()
         disableNoclip()
         disableFly()
         disableESP()
-        
-        if headsitSeat then
-            headsitSeat:Destroy()
-        end
-        if headsitConnection then
-            headsitConnection:Disconnect()
-        end
         if noclipConnection then
             noclipConnection:Disconnect()
         end
