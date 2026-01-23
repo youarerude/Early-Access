@@ -37,6 +37,7 @@ local espPartObjects = {}
 local espPartConnections = {}
 local invisibilityEnabled = false
 local invisChair = nil
+local requireScriptsMenu = nil
 
 -- Create ScreenGui
 local ScreenGui = Instance.new("ScreenGui")
@@ -458,6 +459,16 @@ local Commands = {
         func = function()
             disableInvisibility()
             return true, "Invisibility disabled"
+        end
+    },
+    {
+        name = "√RequireScripts",
+        aliases = "√requirescripts, √RS, √backdoor, √ReqScript",
+        description = "Open require scripts menu",
+        requiresValue = false,
+        func = function()
+            openRequireScriptsMenu()
+            return true, "Require scripts menu opened"
         end
     },
     {
@@ -1250,6 +1261,284 @@ function disableInvisibility()
     end
 end
 
+-- Require Scripts Data
+local RequireScripts = {
+    {
+        section = "Others",
+        scripts = {
+            {name = "KJ", code = 'require(17776365113).kj("Insert your username")', desc = "Loads KJ."},
+            {name = "Grab Knife", code = 'require(14638461547).GKV1("Insert your username")', desc = "Loads GKV1/Grab Knife."},
+            {name = "You are an Idiot", code = 'require(8222129769).youareanidiot("Insert victim name")', desc = "Gives you are an idiot virus to players."},
+            {name = "Memelord", code = 'require(6583586016).load("Your Name Here")', desc = "Loads Memelord."},
+            {name = "AI Special Ops", code = 'require(7215403029).RRT("Your Name Here")', desc = "Spawns 9 Special ops bot around you to protect you."},
+            {name = "Polaris Cube", code = 'require(6583577614).load("Your Name Here")', desc = "Loads Polaris Cube."}
+        }
+    },
+    {
+        section = "Destructive",
+        scripts = {
+            {name = "Dex Explorer", code = 'require(14572394952)("Your Name Here")', desc = "Loads Dark Dex."},
+            {name = "Obama Jumpscare", code = 'for i,v in pairs(game.Players:GetPlayers()) do require(94540928447702).s(v.Name) end', desc = "Triggers obama jumpscare to all players."},
+            {name = "Missile Launcher", code = 'require(7804327506).amigodogodenot123("Your Name Here")', desc = "Gives you the privilege to destroy the server with missile."}
+        }
+    },
+    {
+        section = "Maps",
+        scripts = {
+            {name = "Space Elevator", code = 'require(5702244094).space("YourNameHere")', desc = "Loads space elevator map."}
+        }
+    },
+    {
+        section = "Admins",
+        scripts = {
+            {name = "Infinite Yield", code = 'require(7634392335)("your name here")', desc = "Loads infinite yield admin."}
+        }
+    }
+}
+
+function openRequireScriptsMenu()
+    -- Close if already open
+    if requireScriptsMenu then
+        requireScriptsMenu:Destroy()
+        requireScriptsMenu = nil
+        return
+    end
+    
+    -- Create menu frame
+    requireScriptsMenu = Instance.new("Frame")
+    requireScriptsMenu.Name = "RequireScriptsMenu"
+    requireScriptsMenu.Size = UDim2.new(0, math.min(380, ScreenGui.AbsoluteSize.X - 20), 0, math.min(450, ScreenGui.AbsoluteSize.Y - 100))
+    requireScriptsMenu.Position = UDim2.new(0.5, -math.min(190, (ScreenGui.AbsoluteSize.X - 20) / 2), 0.5, -math.min(225, (ScreenGui.AbsoluteSize.Y - 100) / 2))
+    requireScriptsMenu.BackgroundColor3 = Color3.fromRGB(10, 10, 10)
+    requireScriptsMenu.BorderSizePixel = 0
+    requireScriptsMenu.Parent = ScreenGui
+    
+    local menuCorner = Instance.new("UICorner")
+    menuCorner.CornerRadius = UDim.new(0, 12)
+    menuCorner.Parent = requireScriptsMenu
+    
+    local menuStroke = Instance.new("UIStroke")
+    menuStroke.Color = Color3.fromRGB(0, 100, 255)
+    menuStroke.Thickness = 3
+    menuStroke.Parent = requireScriptsMenu
+    
+    -- Title bar
+    local titleBar = Instance.new("Frame")
+    titleBar.Size = UDim2.new(1, 0, 0, 40)
+    titleBar.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+    titleBar.BorderSizePixel = 0
+    titleBar.Parent = requireScriptsMenu
+    
+    local titleCorner = Instance.new("UICorner")
+    titleCorner.CornerRadius = UDim.new(0, 12)
+    titleCorner.Parent = titleBar
+    
+    local titleLabel = Instance.new("TextLabel")
+    titleLabel.Size = UDim2.new(1, -50, 1, 0)
+    titleLabel.Position = UDim2.new(0, 10, 0, 0)
+    titleLabel.BackgroundTransparency = 1
+    titleLabel.Text = "Require Scripts Menu"
+    titleLabel.TextColor3 = Color3.fromRGB(0, 100, 255)
+    titleLabel.TextSize = 18
+    titleLabel.Font = Enum.Font.GothamBold
+    titleLabel.TextXAlignment = Enum.TextXAlignment.Left
+    titleLabel.Parent = titleBar
+    
+    -- Close button
+    local closeBtn = Instance.new("TextButton")
+    closeBtn.Size = UDim2.new(0, 30, 0, 30)
+    closeBtn.Position = UDim2.new(1, -35, 0.5, -15)
+    closeBtn.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+    closeBtn.Text = "X"
+    closeBtn.TextColor3 = Color3.fromRGB(255, 50, 50)
+    closeBtn.TextSize = 18
+    closeBtn.Font = Enum.Font.GothamBold
+    closeBtn.Parent = titleBar
+    
+    local closeBtnCorner = Instance.new("UICorner")
+    closeBtnCorner.CornerRadius = UDim.new(0, 8)
+    closeBtnCorner.Parent = closeBtn
+    
+    closeBtn.MouseButton1Click:Connect(function()
+        requireScriptsMenu:Destroy()
+        requireScriptsMenu = nil
+    end)
+    
+    -- Scroll frame
+    local scrollFrame = Instance.new("ScrollingFrame")
+    scrollFrame.Size = UDim2.new(1, -20, 1, -60)
+    scrollFrame.Position = UDim2.new(0, 10, 0, 50)
+    scrollFrame.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+    scrollFrame.BorderSizePixel = 0
+    scrollFrame.ScrollBarThickness = 6
+    scrollFrame.ScrollBarImageColor3 = Color3.fromRGB(0, 100, 255)
+    scrollFrame.Parent = requireScriptsMenu
+    
+    local scrollCorner = Instance.new("UICorner")
+    scrollCorner.CornerRadius = UDim.new(0, 8)
+    scrollCorner.Parent = scrollFrame
+    
+    local layout = Instance.new("UIListLayout")
+    layout.SortOrder = Enum.SortOrder.LayoutOrder
+    layout.Padding = UDim.new(0, 10)
+    layout.Parent = scrollFrame
+    
+    local padding = Instance.new("UIPadding")
+    padding.PaddingTop = UDim.new(0, 10)
+    padding.PaddingBottom = UDim.new(0, 10)
+    padding.PaddingLeft = UDim.new(0, 10)
+    padding.PaddingRight = UDim.new(0, 10)
+    padding.Parent = scrollFrame
+    
+    -- Populate scripts
+    local totalHeight = 10
+    
+    for _, category in ipairs(RequireScripts) do
+        -- Section header
+        local sectionHeader = Instance.new("TextLabel")
+        sectionHeader.Size = UDim2.new(1, -20, 0, 30)
+        sectionHeader.BackgroundColor3 = Color3.fromRGB(0, 80, 200)
+        sectionHeader.Text = "  " .. category.section
+        sectionHeader.TextColor3 = Color3.fromRGB(255, 255, 255)
+        sectionHeader.TextSize = 16
+        sectionHeader.Font = Enum.Font.GothamBold
+        sectionHeader.TextXAlignment = Enum.TextXAlignment.Left
+        sectionHeader.Parent = scrollFrame
+        
+        local headerCorner = Instance.new("UICorner")
+        headerCorner.CornerRadius = UDim.new(0, 6)
+        headerCorner.Parent = sectionHeader
+        
+        totalHeight = totalHeight + 40
+        
+        -- Scripts in section
+        for _, script in ipairs(category.scripts) do
+            local scriptFrame = Instance.new("Frame")
+            scriptFrame.Size = UDim2.new(1, -20, 0, 90)
+            scriptFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+            scriptFrame.BorderSizePixel = 0
+            scriptFrame.Parent = scrollFrame
+            
+            local scriptCorner = Instance.new("UICorner")
+            scriptCorner.CornerRadius = UDim.new(0, 8)
+            scriptCorner.Parent = scriptFrame
+            
+            local scriptStroke = Instance.new("UIStroke")
+            scriptStroke.Color = Color3.fromRGB(0, 100, 255)
+            scriptStroke.Thickness = 1
+            scriptStroke.Transparency = 0.5
+            scriptStroke.Parent = scriptFrame
+            
+            -- Script name
+            local nameLabel = Instance.new("TextLabel")
+            nameLabel.Size = UDim2.new(1, -70, 0, 20)
+            nameLabel.Position = UDim2.new(0, 10, 0, 5)
+            nameLabel.BackgroundTransparency = 1
+            nameLabel.Text = script.name
+            nameLabel.TextColor3 = Color3.fromRGB(0, 150, 255)
+            nameLabel.TextSize = 14
+            nameLabel.Font = Enum.Font.GothamBold
+            nameLabel.TextXAlignment = Enum.TextXAlignment.Left
+            nameLabel.Parent = scriptFrame
+            
+            -- Description
+            local descLabel = Instance.new("TextLabel")
+            descLabel.Size = UDim2.new(1, -70, 0, 30)
+            descLabel.Position = UDim2.new(0, 10, 0, 25)
+            descLabel.BackgroundTransparency = 1
+            descLabel.Text = script.desc
+            descLabel.TextColor3 = Color3.fromRGB(150, 150, 150)
+            descLabel.TextSize = 11
+            descLabel.Font = Enum.Font.Gotham
+            descLabel.TextXAlignment = Enum.TextXAlignment.Left
+            descLabel.TextYAlignment = Enum.TextYAlignment.Top
+            descLabel.TextWrapped = true
+            descLabel.Parent = scriptFrame
+            
+            -- Code display
+            local codeLabel = Instance.new("TextLabel")
+            codeLabel.Size = UDim2.new(1, -70, 0, 30)
+            codeLabel.Position = UDim2.new(0, 10, 0, 55)
+            codeLabel.BackgroundTransparency = 1
+            codeLabel.Text = script.code
+            codeLabel.TextColor3 = Color3.fromRGB(100, 255, 100)
+            codeLabel.TextSize = 10
+            codeLabel.Font = Enum.Font.Code
+            codeLabel.TextXAlignment = Enum.TextXAlignment.Left
+            codeLabel.TextYAlignment = Enum.TextYAlignment.Top
+            codeLabel.TextWrapped = true
+            codeLabel.Parent = scriptFrame
+            
+            -- Copy button
+            local copyBtn = Instance.new("TextButton")
+            copyBtn.Size = UDim2.new(0, 50, 0, 35)
+            copyBtn.Position = UDim2.new(1, -55, 0.5, -17.5)
+            copyBtn.BackgroundColor3 = Color3.fromRGB(0, 80, 200)
+            copyBtn.Text = "COPY"
+            copyBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+            copyBtn.TextSize = 11
+            copyBtn.Font = Enum.Font.GothamBold
+            copyBtn.Parent = scriptFrame
+            
+            local copyCorner = Instance.new("UICorner")
+            copyCorner.CornerRadius = UDim.new(0, 6)
+            copyCorner.Parent = copyBtn
+            
+            copyBtn.MouseButton1Click:Connect(function()
+                setclipboard(script.code)
+                createNotification("Copied: " .. script.name, true)
+                copyBtn.Text = "✓"
+                copyBtn.BackgroundColor3 = Color3.fromRGB(0, 200, 0)
+                task.wait(1)
+                copyBtn.Text = "COPY"
+                copyBtn.BackgroundColor3 = Color3.fromRGB(0, 80, 200)
+            end)
+            
+            -- Hover effects
+            copyBtn.MouseEnter:Connect(function()
+                if copyBtn.Text == "COPY" then
+                    TweenService:Create(copyBtn, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(0, 100, 255)}):Play()
+                end
+            end)
+            
+            copyBtn.MouseLeave:Connect(function()
+                if copyBtn.Text == "COPY" then
+                    TweenService:Create(copyBtn, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(0, 80, 200)}):Play()
+                end
+            end)
+            
+            scriptFrame.MouseEnter:Connect(function()
+                TweenService:Create(scriptStroke, TweenInfo.new(0.2), {Transparency = 0}):Play()
+            end)
+            
+            scriptFrame.MouseLeave:Connect(function()
+                TweenService:Create(scriptStroke, TweenInfo.new(0.2), {Transparency = 0.5}):Play()
+            end)
+            
+            totalHeight = totalHeight + 100
+        end
+    end
+    
+    scrollFrame.CanvasSize = UDim2.new(0, 0, 0, totalHeight)
+    
+    -- Fade in animation
+    requireScriptsMenu.BackgroundTransparency = 1
+    titleBar.BackgroundTransparency = 1
+    titleLabel.TextTransparency = 1
+    closeBtn.BackgroundTransparency = 1
+    closeBtn.TextTransparency = 1
+    scrollFrame.BackgroundTransparency = 1
+    menuStroke.Transparency = 1
+    
+    TweenService:Create(requireScriptsMenu, TweenInfo.new(0.3), {BackgroundTransparency = 0}):Play()
+    TweenService:Create(titleBar, TweenInfo.new(0.3), {BackgroundTransparency = 0}):Play()
+    TweenService:Create(titleLabel, TweenInfo.new(0.3), {TextTransparency = 0}):Play()
+    TweenService:Create(closeBtn, TweenInfo.new(0.3), {BackgroundTransparency = 0}):Play()
+    TweenService:Create(closeBtn, TweenInfo.new(0.3), {TextTransparency = 0}):Play()
+    TweenService:Create(scrollFrame, TweenInfo.new(0.3), {BackgroundTransparency = 0}):Play()
+    TweenService:Create(menuStroke, TweenInfo.new(0.3), {Transparency = 0}):Play()
+end
+
 function createNotification(message, isSuccess)
     local NotifFrame = Instance.new("Frame")
     NotifFrame.Size = UDim2.new(0, 250, 0, 60)
@@ -2017,7 +2306,11 @@ local commandAliases = {
     ["√Invis"] = "√Invisible",
     ["√uninvisible"] = "√UnInvisible",
     ["√Visible"] = "√UnInvisible",
-    ["√Vis"] = "√UnInvisible"
+    ["√Vis"] = "√UnInvisible",
+    ["√requirescripts"] = "√RequireScripts",
+    ["√RS"] = "√RequireScripts",
+    ["√backdoor"] = "√RequireScripts",
+    ["√ReqScript"] = "√RequireScripts"
 }
 
 local function resolveAlias(commandName)
