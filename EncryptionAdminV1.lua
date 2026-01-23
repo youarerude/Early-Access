@@ -35,6 +35,9 @@ local espObjects = {}
 local espConnections = {}
 local headsitSeat = nil
 local headsitConnection = nil
+local espPartEnabled = false
+local espPartObjects = {}
+local espPartConnection = nil
 
 -- Create ScreenGui
 local ScreenGui = Instance.new("ScreenGui")
@@ -418,6 +421,26 @@ local Commands = {
             else
                 return false, "Failed to load Infinite Yield: " .. tostring(err)
             end
+        end
+    },
+    {
+        name = "√ESPPart",
+        aliases = "√esppart, √EspP, √EPart",
+        description = "ESP/highlight parts by name",
+        requiresValue = true,
+        valueType = "string",
+        func = function(value)
+            return enableESPPart(value)
+        end
+    },
+    {
+        name = "√UnESPPart",
+        aliases = "√unesppart, √UnEspP, √UEPart",
+        description = "Disable part ESP",
+        requiresValue = false,
+        func = function()
+            disableESPPart()
+            return true, "Part ESP disabled"
         end
     }
 }
@@ -915,17 +938,7 @@ function headsitPlayer(value)
     headsitSeat.CFrame = targetHead.CFrame * CFrame.new(0, 1.5, 0)
     headsitSeat.Parent = workspace
     
-    -- Teleport player to seat BEFORE starting the update loop
-    task.wait(0.1)
-    LocalPlayer.Character.HumanoidRootPart.CFrame = headsitSeat.CFrame
-    task.wait(0.1)
-    
-    local humanoid = LocalPlayer.Character:FindFirstChild("Humanoid")
-    if humanoid then
-        humanoid.Sit = true
-    end
-    
-    -- Make seat follow the target's head
+    -- Make seat follow the target's head with update loop FIRST
     headsitConnection = RunService.Heartbeat:Connect(function()
         if not headsitSeat or not headsitSeat.Parent then
             if headsitConnection then
@@ -956,7 +969,137 @@ function headsitPlayer(value)
         end
     end)
     
+    -- THEN teleport player to seat and make them sit
+    task.wait(0.2)
+    if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+        LocalPlayer.Character.HumanoidRootPart.CFrame = headsitSeat.CFrame
+        task.wait(0.1)
+        
+        local humanoid = LocalPlayer.Character:FindFirstChild("Humanoid")
+        if humanoid then
+            humanoid.Sit = true
+        end
+    end
+    
     return true, "Now sitting on " .. targetPlayer.DisplayName .. "'s head"
+end
+
+function enableESPPart(partName)
+    if espPartEnabled then
+        disableESPPart()
+        task.wait(0.1)
+    end
+    
+    espPartEnabled = true
+    local searchName = partName:lower()
+    local foundCount = 0
+    
+    local function highlightPart(part)
+        if espPartObjects[part] then return end
+        
+        -- Create Highlight
+        local highlight = Instance.new("Highlight")
+        highlight.Name = "ESPPartHighlight"
+        highlight.Adornee = part
+        highlight.FillColor = Color3.fromRGB(255, 255, 0)
+        highlight.OutlineColor = Color3.fromRGB(255, 200, 0)
+        highlight.FillTransparency = 0.5
+        highlight.OutlineTransparency = 0
+        highlight.Parent = part
+        
+        -- Create BillboardGui
+        local billboard = Instance.new("BillboardGui")
+        billboard.Name = "ESPPartBillboard"
+        billboard.Adornee = part
+        billboard.Size = UDim2.new(0, 150, 0, 50)
+        billboard.StudsOffset = Vector3.new(0, 2, 0)
+        billboard.AlwaysOnTop = true
+        billboard.Parent = part
+        
+        -- Create background frame
+        local bgFrame = Instance.new("Frame")
+        bgFrame.Size = UDim2.new(1, 0, 1, 0)
+        bgFrame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+        bgFrame.BackgroundTransparency = 0.5
+        bgFrame.BorderSizePixel = 0
+        bgFrame.Parent = billboard
+        
+        local bgCorner = Instance.new("UICorner")
+        bgCorner.CornerRadius = UDim.new(0, 8)
+        bgCorner.Parent = bgFrame
+        
+        -- Create text label
+        local textLabel = Instance.new("TextLabel")
+        textLabel.Size = UDim2.new(1, -10, 1, -10)
+        textLabel.Position = UDim2.new(0, 5, 0, 5)
+        textLabel.BackgroundTransparency = 1
+        textLabel.TextColor3 = Color3.fromRGB(255, 255, 0)
+        textLabel.TextSize = 14
+        textLabel.Font = Enum.Font.GothamBold
+        textLabel.TextWrapped = true
+        textLabel.Text = part.Name
+        textLabel.Parent = bgFrame
+        
+        espPartObjects[part] = {
+            Highlight = highlight,
+            BillboardGui = billboard,
+            Part = part
+        }
+        
+        foundCount = foundCount + 1
+    end
+    
+    local function searchParts(parent)
+        for _, obj in pairs(parent:GetDescendants()) do
+            if espPartEnabled and obj:IsA("BasePart") then
+                local objNameLower = obj.Name:lower()
+                if objNameLower:find(searchName, 1, true) then
+                    highlightPart(obj)
+                end
+            end
+        end
+    end
+    
+    -- Search in workspace
+    searchParts(workspace)
+    
+    -- Monitor for new parts
+    espPartConnection = workspace.DescendantAdded:Connect(function(obj)
+        if not espPartEnabled then return end
+        if obj:IsA("BasePart") then
+            local objNameLower = obj.Name:lower()
+            if objNameLower:find(searchName, 1, true) then
+                task.wait(0.1)
+                highlightPart(obj)
+            end
+        end
+    end)
+    
+    if foundCount > 0 then
+        return true, "ESP enabled for " .. foundCount .. " parts matching '" .. partName .. "'"
+    else
+        disableESPPart()
+        return false, "No parts found matching '" .. partName .. "'"
+    end
+end
+
+function disableESPPart()
+    espPartEnabled = false
+    
+    if espPartConnection then
+        espPartConnection:Disconnect()
+        espPartConnection = nil
+    end
+    
+    for part, espData in pairs(espPartObjects) do
+        if espData.Highlight then
+            espData.Highlight:Destroy()
+        end
+        if espData.BillboardGui then
+            espData.BillboardGui:Destroy()
+        end
+    end
+    espPartObjects = {}
 end
 
 function createNotification(message, isSuccess)
@@ -1672,7 +1815,13 @@ end
 spawn(function()
     while true do
         if isOpen then
-            if espEnabled then
+            if espPartEnabled then
+                local partCount = 0
+                for _ in pairs(espPartObjects) do
+                    partCount = partCount + 1
+                end
+                updateStatus("Status: Part ESP Active (" .. partCount .. " parts)", Color3.fromRGB(255, 255, 0))
+            elseif espEnabled then
                 local playerCount = 0
                 for _ in pairs(espObjects) do
                     playerCount = playerCount + 1
@@ -1714,7 +1863,13 @@ local commandAliases = {
     ["√infyield"] = "√InfiniteYield",
     ["√infiniteyield"] = "√InfiniteYield",
     ["√iy"] = "√InfiniteYield",
-    ["√IY"] = "√InfiniteYield"
+    ["√IY"] = "√InfiniteYield",
+    ["√esppart"] = "√ESPPart",
+    ["√EspP"] = "√ESPPart",
+    ["√EPart"] = "√ESPPart",
+    ["√unesppart"] = "√UnESPPart",
+    ["√UnEspP"] = "√UnESPPart",
+    ["√UEPart"] = "√UnESPPart"
 }
 
 local function resolveAlias(commandName)
@@ -1900,6 +2055,7 @@ ScreenGui.AncestryChanged:Connect(function()
         disableNoclip()
         disableFly()
         disableESP()
+        disableESPPart()
         if noclipConnection then
             noclipConnection:Disconnect()
         end
