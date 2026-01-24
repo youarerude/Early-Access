@@ -41,6 +41,9 @@ local requireScriptsMenu = nil
 local chatLogButton = nil
 local chatLogFrame = nil
 local chatLogging = true
+local walkflinging = false
+local walkflingConnection = nil
+local walkflingHealthConnection = nil
 
 -- Create ScreenGui
 local ScreenGui = Instance.new("ScreenGui")
@@ -482,6 +485,26 @@ local Commands = {
         func = function()
             createChatLogger()
             return true, "Chat logger created"
+        end
+    },
+    {
+        name = "√Walkfling",
+        aliases = "√walkfling, √fling, √wfling, √walkf",
+        description = "Enable walkfling mode",
+        requiresValue = false,
+        func = function()
+            enableWalkfling()
+            return true, "Walkfling enabled"
+        end
+    },
+    {
+        name = "√UnWalkfling",
+        aliases = "√unwalkfling, √unfling, √unwfling, √unwalkf",
+        description = "Disable walkfling mode",
+        requiresValue = false,
+        func = function()
+            disableWalkfling()
+            return true, "Walkfling disabled"
         end
     },
     {
@@ -1905,6 +1928,133 @@ function createChatLogger()
     end)
 end
 
+function enableWalkfling()
+    if walkflinging then
+        createNotification("Walkfling already enabled!", false)
+        return
+    end
+    
+    if not LocalPlayer.Character then
+        createNotification("Character not found!", false)
+        return
+    end
+    
+    local char = LocalPlayer.Character
+    local Root = char:FindFirstChild("HumanoidRootPart")
+    local Humanoid = char:FindFirstChild("Humanoid")
+    
+    if not Root or not Humanoid then
+        createNotification("Character missing required parts!", false)
+        return
+    end
+    
+    walkflinging = true
+    
+    -- Enable noclip
+    enableNoclip()
+    
+    -- Disable collision with other players
+    for _, player in pairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and player.Character then
+            for _, part in pairs(player.Character:GetDescendants()) do
+                if part:IsA("BasePart") then
+                    part.CanCollide = false
+                end
+            end
+        end
+    end
+    
+    -- Monitor new players for collision disable
+    local playerAddedConnection = Players.PlayerAdded:Connect(function(player)
+        if walkflinging then
+            player.CharacterAdded:Connect(function(character)
+                task.wait(1)
+                for _, part in pairs(character:GetDescendants()) do
+                    if part:IsA("BasePart") then
+                        part.CanCollide = false
+                    end
+                end
+            end)
+        end
+    end)
+    
+    -- Godmode setup
+    Humanoid:SetStateEnabled(Enum.HumanoidStateType.Dead, false)
+    Humanoid.BreakJointsOnDeath = false
+    
+    -- Keep health maxed
+    walkflingHealthConnection = RunService.Stepped:Connect(function()
+        if walkflinging and Humanoid then
+            Humanoid.Health = math.huge
+            Humanoid.MaxHealth = math.huge
+        end
+    end)
+    
+    -- Walkfling mechanics
+    Root.CanCollide = false
+    Humanoid:ChangeState(11)
+    
+    walkflingConnection = spawn(function()
+        while walkflinging and Root and Root.Parent do
+            RunService.Heartbeat:Wait()
+            local vel = Root.Velocity
+            Root.Velocity = vel * 99999999 + Vector3.new(0, 99999999, 0)
+            RunService.RenderStepped:Wait()
+            Root.Velocity = vel
+            RunService.Stepped:Wait()
+            Root.Velocity = vel + Vector3.new(0, 0.1, 0)
+        end
+    end)
+end
+
+function disableWalkfling()
+    if not walkflinging then
+        createNotification("Walkfling is not enabled!", false)
+        return
+    end
+    
+    walkflinging = false
+    
+    -- Disable noclip
+    disableNoclip()
+    
+    -- Disconnect health connection
+    if walkflingHealthConnection then
+        walkflingHealthConnection:Disconnect()
+        walkflingHealthConnection = nil
+    end
+    
+    -- Re-enable collision with other players
+    for _, player in pairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and player.Character then
+            for _, part in pairs(player.Character:GetDescendants()) do
+                if part:IsA("BasePart") then
+                    part.CanCollide = true
+                end
+            end
+        end
+    end
+    
+    -- Reset character state
+    if LocalPlayer.Character then
+        local Root = LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+        local Humanoid = LocalPlayer.Character:FindFirstChild("Humanoid")
+        
+        if Root then
+            Root.CanCollide = true
+            Root.Velocity = Vector3.new(0, 0, 0)
+        end
+        
+        if Humanoid then
+            Humanoid:SetStateEnabled(Enum.HumanoidStateType.Dead, true)
+            Humanoid.BreakJointsOnDeath = true
+            Humanoid.MaxHealth = 100
+            Humanoid.Health = 100
+            Humanoid:ChangeState(Enum.HumanoidStateType.RunningNoPhysics)
+        end
+    end
+end
+
 function createNotification(message, isSuccess)
     local NotifFrame = Instance.new("Frame")
     NotifFrame.Size = UDim2.new(0, 250, 0, 60)
@@ -2405,6 +2555,13 @@ LocalPlayer.CharacterAdded:Connect(function(character)
         task.wait(0.5)
         enableInvisibility()
     end
+    
+    -- Re-enable walkfling if it was enabled
+    if walkflinging then
+        walkflinging = false
+        task.wait(0.5)
+        enableWalkfling()
+    end
 end)
 
 -- Handle mobile keyboard
@@ -2611,7 +2768,9 @@ spawn(function()
         if isOpen then
             local espPartCount = #espPartObjects / 2 -- Divide by 2 because we have highlights + billboards
             
-            if invisibilityEnabled then
+            if walkflinging then
+                updateStatus("Status: Walkfling Active ⚠️", Color3.fromRGB(255, 100, 0))
+            elseif invisibilityEnabled then
                 updateStatus("Status: Invisible Mode Active", Color3.fromRGB(150, 150, 150))
             elseif #espPartObjects > 0 then
                 updateStatus("Status: Part ESP Active (" .. math.floor(espPartCount) .. " objects)", Color3.fromRGB(255, 0, 255))
@@ -2679,7 +2838,15 @@ local commandAliases = {
     ["√ReqScript"] = "√RequireScripts",
     ["√chatlog"] = "√ChatLog",
     ["√ChatLogger"] = "√ChatLog",
-    ["√ChatLg"] = "√ChatLog"
+    ["√ChatLg"] = "√ChatLog",
+    ["√walkfling"] = "√Walkfling",
+    ["√fling"] = "√Walkfling",
+    ["√wfling"] = "√Walkfling",
+    ["√walkf"] = "√Walkfling",
+    ["√unwalkfling"] = "√UnWalkfling",
+    ["√unfling"] = "√UnWalkfling",
+    ["√unwfling"] = "√UnWalkfling",
+    ["√unwalkf"] = "√UnWalkfling"
 }
 
 local function resolveAlias(commandName)
@@ -2867,6 +3034,7 @@ ScreenGui.AncestryChanged:Connect(function()
         disableESP()
         disableESPPart()
         disableInvisibility()
+        disableWalkfling()
         if noclipConnection then
             noclipConnection:Disconnect()
         end
