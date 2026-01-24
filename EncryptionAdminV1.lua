@@ -38,6 +38,8 @@ local espPartConnections = {}
 local invisibilityEnabled = false
 local invisChair = nil
 local requireScriptsMenu = nil
+local chatLogGui = nil
+local chatLogging = true
 
 -- Create ScreenGui
 local ScreenGui = Instance.new("ScreenGui")
@@ -469,6 +471,16 @@ local Commands = {
         func = function()
             openRequireScriptsMenu()
             return true, "Require scripts menu opened"
+        end
+    },
+    {
+        name = "√ChatLog",
+        aliases = "√chatlog, √ChatLogger, √ChatLg",
+        description = "Open chat logger",
+        requiresValue = false,
+        func = function()
+            openChatLogger()
+            return true, "Chat logger opened"
         end
     },
     {
@@ -1299,18 +1311,18 @@ local RequireScripts = {
 function openRequireScriptsMenu()
     -- Close if already open
     if requireScriptsMenu then
-        requireScriptsMenu:Destroy()
-        requireScriptsMenu = nil
+        closeRequireScriptsMenu()
         return
     end
     
-    -- Create menu frame
+    -- Create menu frame (start small for animation)
     requireScriptsMenu = Instance.new("Frame")
     requireScriptsMenu.Name = "RequireScriptsMenu"
-    requireScriptsMenu.Size = UDim2.new(0, math.min(380, ScreenGui.AbsoluteSize.X - 20), 0, math.min(450, ScreenGui.AbsoluteSize.Y - 100))
-    requireScriptsMenu.Position = UDim2.new(0.5, -math.min(190, (ScreenGui.AbsoluteSize.X - 20) / 2), 0.5, -math.min(225, (ScreenGui.AbsoluteSize.Y - 100) / 2))
+    requireScriptsMenu.Size = UDim2.new(0, 50, 0, 50)
+    requireScriptsMenu.Position = UDim2.new(0.5, -25, 0.5, -25)
     requireScriptsMenu.BackgroundColor3 = Color3.fromRGB(10, 10, 10)
     requireScriptsMenu.BorderSizePixel = 0
+    requireScriptsMenu.ClipsDescendants = true
     requireScriptsMenu.Parent = ScreenGui
     
     local menuCorner = Instance.new("UICorner")
@@ -1360,8 +1372,7 @@ function openRequireScriptsMenu()
     closeBtnCorner.Parent = closeBtn
     
     closeBtn.MouseButton1Click:Connect(function()
-        requireScriptsMenu:Destroy()
-        requireScriptsMenu = nil
+        closeRequireScriptsMenu()
     end)
     
     -- Scroll frame
@@ -1521,22 +1532,341 @@ function openRequireScriptsMenu()
     
     scrollFrame.CanvasSize = UDim2.new(0, 0, 0, totalHeight)
     
-    -- Fade in animation
-    requireScriptsMenu.BackgroundTransparency = 1
-    titleBar.BackgroundTransparency = 1
-    titleLabel.TextTransparency = 1
-    closeBtn.BackgroundTransparency = 1
-    closeBtn.TextTransparency = 1
-    scrollFrame.BackgroundTransparency = 1
-    menuStroke.Transparency = 1
+    -- Expand animation
+    local targetWidth = math.min(380, ScreenGui.AbsoluteSize.X - 20)
+    local targetHeight = math.min(450, ScreenGui.AbsoluteSize.Y - 100)
     
-    TweenService:Create(requireScriptsMenu, TweenInfo.new(0.3), {BackgroundTransparency = 0}):Play()
-    TweenService:Create(titleBar, TweenInfo.new(0.3), {BackgroundTransparency = 0}):Play()
-    TweenService:Create(titleLabel, TweenInfo.new(0.3), {TextTransparency = 0}):Play()
-    TweenService:Create(closeBtn, TweenInfo.new(0.3), {BackgroundTransparency = 0}):Play()
-    TweenService:Create(closeBtn, TweenInfo.new(0.3), {TextTransparency = 0}):Play()
-    TweenService:Create(scrollFrame, TweenInfo.new(0.3), {BackgroundTransparency = 0}):Play()
-    TweenService:Create(menuStroke, TweenInfo.new(0.3), {Transparency = 0}):Play()
+    local expandTween = TweenService:Create(requireScriptsMenu, TweenInfo.new(0.4, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+        Size = UDim2.new(0, targetWidth, 0, targetHeight),
+        Position = UDim2.new(0.5, -targetWidth/2, 0.5, -targetHeight/2)
+    })
+    
+    expandTween:Play()
+    
+    -- Fade in elements after expansion
+    expandTween.Completed:Connect(function()
+        for _, child in ipairs(scrollFrame:GetChildren()) do
+            if child:IsA("Frame") or child:IsA("TextLabel") then
+                child.BackgroundTransparency = 1
+                if child:FindFirstChild("TextLabel") then
+                    for _, label in ipairs(child:GetDescendants()) do
+                        if label:IsA("TextLabel") then
+                            label.TextTransparency = 1
+                        end
+                    end
+                end
+                if child:FindFirstChild("TextButton") then
+                    for _, btn in ipairs(child:GetDescendants()) do
+                        if btn:IsA("TextButton") then
+                            btn.BackgroundTransparency = 1
+                            btn.TextTransparency = 1
+                        end
+                    end
+                end
+                
+                local fadeTween = TweenService:Create(child, TweenInfo.new(0.2), {BackgroundTransparency = 0})
+                fadeTween:Play()
+                
+                for _, label in ipairs(child:GetDescendants()) do
+                    if label:IsA("TextLabel") then
+                        TweenService:Create(label, TweenInfo.new(0.2), {TextTransparency = 0}):Play()
+                    end
+                    if label:IsA("TextButton") then
+                        TweenService:Create(label, TweenInfo.new(0.2), {BackgroundTransparency = 0, TextTransparency = 0}):Play()
+                    end
+                end
+            end
+        end
+    end)
+end
+
+function closeRequireScriptsMenu()
+    if not requireScriptsMenu then return end
+    
+    -- Fade out elements
+    for _, child in ipairs(requireScriptsMenu:GetDescendants()) do
+        if child:IsA("Frame") or child:IsA("TextLabel") or child:IsA("TextButton") or child:IsA("ScrollingFrame") then
+            TweenService:Create(child, TweenInfo.new(0.2), {BackgroundTransparency = 1}):Play()
+        end
+        if child:IsA("TextLabel") or child:IsA("TextButton") then
+            TweenService:Create(child, TweenInfo.new(0.2), {TextTransparency = 1}):Play()
+        end
+        if child:IsA("UIStroke") then
+            TweenService:Create(child, TweenInfo.new(0.2), {Transparency = 1}):Play()
+        end
+    end
+    
+    task.wait(0.2)
+    
+    -- Shrink animation
+    local shrinkTween = TweenService:Create(requireScriptsMenu, TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.In), {
+        Size = UDim2.new(0, 50, 0, 50),
+        Position = UDim2.new(0.5, -25, 0.5, -25)
+    })
+    
+    shrinkTween:Play()
+    shrinkTween.Completed:Connect(function()
+        requireScriptsMenu:Destroy()
+        requireScriptsMenu = nil
+    end)
+end
+
+function openChatLogger()
+    if chatLogGui then
+        return
+    end
+    
+    chatLogging = true
+    local prevOutputPos = 0
+    
+    -- Create main ScreenGui
+    chatLogGui = Instance.new("ScreenGui")
+    chatLogGui.Name = "ChatLogGui"
+    chatLogGui.ResetOnSpawn = false
+    chatLogGui.Parent = ScreenGui
+    
+    -- Create chat button (appears next to default chat)
+    local ChatButton = Instance.new("TextButton")
+    ChatButton.Name = "ChatButton"
+    ChatButton.Size = UDim2.new(0, 100, 0, 30)
+    ChatButton.Position = UDim2.new(0, 10, 1, -40)
+    ChatButton.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+    ChatButton.BorderSizePixel = 0
+    ChatButton.Text = "[Chat V1.2]"
+    ChatButton.TextColor3 = Color3.fromRGB(0, 150, 255)
+    ChatButton.TextSize = 14
+    ChatButton.Font = Enum.Font.GothamBold
+    ChatButton.Parent = chatLogGui
+    
+    local btnCorner = Instance.new("UICorner")
+    btnCorner.CornerRadius = UDim.new(0, 6)
+    btnCorner.Parent = ChatButton
+    
+    local btnStroke = Instance.new("UIStroke")
+    btnStroke.Color = Color3.fromRGB(0, 100, 255)
+    btnStroke.Thickness = 2
+    btnStroke.Parent = ChatButton
+    
+    -- Create main frame (starts as button size)
+    local Frame = Instance.new("Frame")
+    Frame.Name = "Frame"
+    Frame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+    Frame.BorderSizePixel = 0
+    Frame.Position = UDim2.new(0, 10, 1, -40)
+    Frame.Size = UDim2.new(0, 100, 0, 30)
+    Frame.Active = true
+    Frame.Draggable = true
+    Frame.ClipsDescendants = true
+    Frame.Visible = false
+    Frame.Parent = chatLogGui
+    
+    local frameCorner = Instance.new("UICorner")
+    frameCorner.CornerRadius = UDim.new(0, 8)
+    frameCorner.Parent = Frame
+    
+    local frameStroke = Instance.new("UIStroke")
+    frameStroke.Color = Color3.fromRGB(0, 100, 255)
+    frameStroke.Thickness = 2
+    frameStroke.Parent = Frame
+    
+    -- Title
+    local title = Instance.new("TextLabel")
+    title.Name = "title"
+    title.BackgroundTransparency = 1
+    title.Size = UDim2.new(0, 115, 0, 25)
+    title.Position = UDim2.new(0, 5, 0, 0)
+    title.Font = Enum.Font.GothamBold
+    title.Text = "Chat Logger"
+    title.TextColor3 = Color3.fromRGB(0, 150, 255)
+    title.TextSize = 14
+    title.TextXAlignment = Enum.TextXAlignment.Left
+    title.Parent = Frame
+    
+    -- Log toggle button
+    local LogBtn = Instance.new("TextButton")
+    LogBtn.Name = "Log"
+    LogBtn.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+    LogBtn.Position = UDim2.new(0.3, 0, 0, 2)
+    LogBtn.Size = UDim2.new(0, 90, 0, 21)
+    LogBtn.Font = Enum.Font.Gotham
+    LogBtn.Text = "Log Chat [ON]"
+    LogBtn.TextColor3 = Color3.fromRGB(0, 255, 0)
+    LogBtn.TextSize = 12
+    LogBtn.Parent = Frame
+    
+    local logCorner = Instance.new("UICorner")
+    logCorner.CornerRadius = UDim.new(0, 4)
+    logCorner.Parent = LogBtn
+    
+    -- Minimize button
+    local MiniBtn = Instance.new("TextButton")
+    MiniBtn.Name = "Mini"
+    MiniBtn.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+    MiniBtn.Position = UDim2.new(0.65, 0, 0, 2)
+    MiniBtn.Size = UDim2.new(0, 65, 0, 21)
+    MiniBtn.Font = Enum.Font.Gotham
+    MiniBtn.Text = "Minimize"
+    MiniBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    MiniBtn.TextSize = 12
+    MiniBtn.Parent = Frame
+    
+    local miniCorner = Instance.new("UICorner")
+    miniCorner.CornerRadius = UDim.new(0, 4)
+    miniCorner.Parent = MiniBtn
+    
+    -- Close button
+    local CloseBtn = Instance.new("TextButton")
+    CloseBtn.Name = "Close"
+    CloseBtn.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+    CloseBtn.Position = UDim2.new(0.88, 0, 0, 2)
+    CloseBtn.Size = UDim2.new(0, 45, 0, 21)
+    CloseBtn.Font = Enum.Font.Gotham
+    CloseBtn.Text = "Close"
+    CloseBtn.TextColor3 = Color3.fromRGB(255, 50, 50)
+    CloseBtn.TextSize = 12
+    CloseBtn.Parent = Frame
+    
+    local closeCorner = Instance.new("UICorner")
+    closeCorner.CornerRadius = UDim.new(0, 4)
+    closeCorner.Parent = CloseBtn
+    
+    -- Log panel (scrolling frame)
+    local LogPanel = Instance.new("ScrollingFrame")
+    LogPanel.Name = "LogPanel"
+    LogPanel.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+    LogPanel.BorderColor3 = Color3.fromRGB(57, 57, 57)
+    LogPanel.Position = UDim2.new(0, 0, 0, 27)
+    LogPanel.Size = UDim2.new(1, 0, 0, 0)
+    LogPanel.ScrollBarThickness = 5
+    LogPanel.ScrollBarImageColor3 = Color3.fromRGB(0, 100, 255)
+    LogPanel.ScrollingEnabled = true
+    LogPanel.CanvasSize = UDim2.new(2, 0, 100, 0)
+    LogPanel.Parent = Frame
+    
+    local panelCorner = Instance.new("UICorner")
+    panelCorner.CornerRadius = UDim.new(0, 6)
+    panelCorner.Parent = LogPanel
+    
+    -- Chat output function
+    local function output(plr, msg)
+        if not chatLogging then return end
+        
+        local colour = Color3.fromRGB(255, 255, 255)
+        
+        if string.sub(msg, 1, 1) == ":" or string.sub(msg, 1, 1) == ";" then
+            colour = Color3.fromRGB(255, 0, 0)
+        elseif string.sub(msg, 1, 2) == "/w" or string.sub(msg, 1, 7) == "/whisper" or string.sub(msg, 1, 5) == "/team" or string.sub(msg, 1, 2) == "/t" then
+            colour = Color3.fromRGB(0, 100, 255)
+        end
+        
+        local o = Instance.new("TextLabel", LogPanel)
+        o.Text = plr.Name .. ": " .. msg
+        o.Size = UDim2.new(0.5, 0, 0.006, 0)
+        o.Position = UDim2.new(0, 0, 0.007 + prevOutputPos, 0)
+        o.Font = Enum.Font.SourceSansSemibold
+        o.TextColor3 = colour
+        o.TextStrokeTransparency = 0
+        o.BackgroundTransparency = 0
+        o.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+        o.BorderSizePixel = 0
+        o.BorderColor3 = Color3.fromRGB(0, 0, 0)
+        o.TextSize = 14
+        o.TextXAlignment = Enum.TextXAlignment.Left
+        o.ClipsDescendants = true
+        prevOutputPos = prevOutputPos + 0.007
+    end
+    
+    -- Connect to all players' chat
+    for _, v in pairs(Players:GetPlayers()) do
+        v.Chatted:Connect(function(msg)
+            output(v, msg)
+        end)
+    end
+    
+    Players.PlayerAdded:Connect(function(plr)
+        plr.Chatted:Connect(function(msg)
+            output(plr, msg)
+        end)
+    end)
+    
+    -- Button functions
+    local minimized = false
+    local isOpen = false
+    
+    ChatButton.MouseButton1Click:Connect(function()
+        if isOpen then return end
+        isOpen = true
+        ChatButton.Visible = false
+        Frame.Visible = true
+        Frame.Size = UDim2.new(0, 100, 0, 30)
+        Frame.Position = UDim2.new(0, 10, 1, -40)
+        
+        -- Expand animation
+        local expandTween = TweenService:Create(Frame, TweenInfo.new(0.4, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+            Size = UDim2.new(0, 392, 0, 230),
+            Position = UDim2.new(0, 10, 1, -270)
+        })
+        expandTween:Play()
+        
+        -- Expand log panel after frame
+        expandTween.Completed:Connect(function()
+            TweenService:Create(LogPanel, TweenInfo.new(0.3, Enum.EasingStyle.Sine, Enum.EasingDirection.Out), {
+                Size = UDim2.new(1, 0, 0, 203)
+            }):Play()
+        end)
+    end)
+    
+    MiniBtn.MouseButton1Click:Connect(function()
+        if minimized then
+            TweenService:Create(LogPanel, TweenInfo.new(0.3, Enum.EasingStyle.Sine, Enum.EasingDirection.Out), {
+                Size = UDim2.new(1, 0, 0, 203)
+            }):Play()
+        else
+            TweenService:Create(LogPanel, TweenInfo.new(0.3, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), {
+                Size = UDim2.new(1, 0, 0, 0)
+            }):Play()
+        end
+        minimized = not minimized
+    end)
+    
+    LogBtn.MouseButton1Click:Connect(function()
+        chatLogging = not chatLogging
+        if chatLogging then
+            LogBtn.Text = "Log Chat [ON]"
+            LogBtn.TextColor3 = Color3.fromRGB(0, 255, 0)
+        else
+            LogBtn.Text = "Log Chat [OFF]"
+            LogBtn.TextColor3 = Color3.fromRGB(255, 0, 0)
+        end
+    end)
+    
+    CloseBtn.MouseButton1Click:Connect(function()
+        -- Fade out
+        for _, child in ipairs(Frame:GetDescendants()) do
+            if child:IsA("TextLabel") or child:IsA("TextButton") then
+                TweenService:Create(child, TweenInfo.new(0.2), {TextTransparency = 1}):Play()
+            end
+            if child:IsA("Frame") or child:IsA("ScrollingFrame") or child:IsA("TextButton") then
+                TweenService:Create(child, TweenInfo.new(0.2), {BackgroundTransparency = 1}):Play()
+            end
+            if child:IsA("UIStroke") then
+                TweenService:Create(child, TweenInfo.new(0.2), {Transparency = 1}):Play()
+            end
+        end
+        
+        task.wait(0.2)
+        
+        -- Shrink to nothing
+        local shrinkTween = TweenService:Create(Frame, TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.In), {
+            Size = UDim2.new(0, 0, 0, 0),
+            Position = UDim2.new(0, 55, 1, -25)
+        })
+        shrinkTween:Play()
+        shrinkTween.Completed:Connect(function()
+            chatLogGui:Destroy()
+            chatLogGui = nil
+        end)
+    end)
 end
 
 function createNotification(message, isSuccess)
@@ -2310,7 +2640,10 @@ local commandAliases = {
     ["√requirescripts"] = "√RequireScripts",
     ["√RS"] = "√RequireScripts",
     ["√backdoor"] = "√RequireScripts",
-    ["√ReqScript"] = "√RequireScripts"
+    ["√ReqScript"] = "√RequireScripts",
+    ["√chatlog"] = "√ChatLog",
+    ["√ChatLogger"] = "√ChatLog",
+    ["√ChatLg"] = "√ChatLog"
 }
 
 local function resolveAlias(commandName)
