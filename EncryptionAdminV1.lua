@@ -1818,12 +1818,30 @@ function openChatLogger()
     
     MiniBtn.MouseButton1Click:Connect(function()
         if minimized then
-            TweenService:Create(LogPanel, TweenInfo.new(0.3, Enum.EasingStyle.Sine, Enum.EasingDirection.Out), {
-                Size = UDim2.new(1, 0, 0, 203)
-            }):Play()
+            -- Expand from button size
+            local expandTween = TweenService:Create(Frame, TweenInfo.new(0.4, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+                Size = UDim2.new(0, 392, 0, 230),
+                Position = UDim2.new(0, 10, 1, -270)
+            })
+            expandTween:Play()
+            
+            expandTween.Completed:Connect(function()
+                TweenService:Create(LogPanel, TweenInfo.new(0.3, Enum.EasingStyle.Sine, Enum.EasingDirection.Out), {
+                    Size = UDim2.new(1, 0, 0, 203)
+                }):Play()
+            end)
         else
-            TweenService:Create(LogPanel, TweenInfo.new(0.3, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), {
+            -- Shrink log panel first
+            TweenService:Create(LogPanel, TweenInfo.new(0.2, Enum.EasingStyle.Sine, Enum.EasingDirection.In), {
                 Size = UDim2.new(1, 0, 0, 0)
+            }):Play()
+            
+            task.wait(0.2)
+            
+            -- Then shrink frame to button size
+            TweenService:Create(Frame, TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.In), {
+                Size = UDim2.new(0, 100, 0, 30),
+                Position = UDim2.new(0, 10, 1, -40)
             }):Play()
         end
         minimized = not minimized
