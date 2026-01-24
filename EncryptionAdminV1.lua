@@ -1705,11 +1705,18 @@ function createChatLogger()
     logPanel.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
     logPanel.BorderColor3 = Color3.fromRGB(57, 57, 57)
     logPanel.ScrollBarThickness = 5
-    logPanel.CanvasSize = UDim2.new(2, 0, 100, 0)
+    logPanel.CanvasSize = UDim2.new(0, 0, 0, 0)
+    logPanel.ScrollingDirection = Enum.ScrollingDirection.Y
     logPanel.Parent = chatLogFrame
     
+    -- Add list layout for better message organization
+    local listLayout = Instance.new("UIListLayout")
+    listLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    listLayout.Padding = UDim.new(0, 2)
+    listLayout.Parent = logPanel
+    
     -- Chat logging variables
-    local prevOutputPos = 0
+    local messageCount = 0
     
     local function output(plr, msg)
         if not chatLogging then return end
@@ -1723,21 +1730,29 @@ function createChatLogger()
             colour = Color3.fromRGB(0, 100, 255) -- Blue for whispers
         end
         
-        local o = Instance.new("TextLabel", logPanel)
+        local o = Instance.new("TextLabel")
+        o.Name = "Message_" .. messageCount
         o.Text = plr.Name .. ": " .. msg
-        o.Size = UDim2.new(0.5, 0, 0.006, 0)
-        o.Position = UDim2.new(0, 0, 0.007 + prevOutputPos, 0)
+        o.Size = UDim2.new(1, -10, 0, 20)
         o.Font = Enum.Font.SourceSans
         o.TextColor3 = colour
         o.TextStrokeTransparency = 0
-        o.BackgroundTransparency = 0
-        o.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-        o.BorderSizePixel = 0
+        o.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+        o.BackgroundTransparency = 1
         o.TextSize = 14
         o.TextXAlignment = Enum.TextXAlignment.Left
-        o.ClipsDescendants = true
+        o.TextYAlignment = Enum.TextYAlignment.Top
+        o.TextWrapped = true
+        o.LayoutOrder = messageCount
+        o.Parent = logPanel
         
-        prevOutputPos = prevOutputPos + 0.007
+        messageCount = messageCount + 1
+        
+        -- Update canvas size
+        logPanel.CanvasSize = UDim2.new(0, 0, 0, listLayout.AbsoluteContentSize.Y + 10)
+        
+        -- Auto scroll to bottom
+        logPanel.CanvasPosition = Vector2.new(0, logPanel.CanvasSize.Y.Offset)
     end
     
     -- Connect to all current players
