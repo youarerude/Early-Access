@@ -1700,13 +1700,14 @@ function createChatLogger()
     -- Log panel
     local logPanel = Instance.new("ScrollingFrame")
     logPanel.Name = "LogPanel"
-    logPanel.Size = UDim2.new(0, 392, 0, 203)
-    logPanel.Position = UDim2.new(0, 0, 0.97, 0)
+    logPanel.Size = UDim2.new(1, 0, 1, -30)
+    logPanel.Position = UDim2.new(0, 0, 0, 30)
     logPanel.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
     logPanel.BorderColor3 = Color3.fromRGB(57, 57, 57)
     logPanel.ScrollBarThickness = 5
     logPanel.CanvasSize = UDim2.new(0, 0, 0, 0)
     logPanel.ScrollingDirection = Enum.ScrollingDirection.Y
+    logPanel.Visible = false
     logPanel.Parent = chatLogFrame
     
     -- Add list layout for better message organization
@@ -1714,6 +1715,13 @@ function createChatLogger()
     listLayout.SortOrder = Enum.SortOrder.LayoutOrder
     listLayout.Padding = UDim.new(0, 2)
     listLayout.Parent = logPanel
+    
+    local listPadding = Instance.new("UIPadding")
+    listPadding.PaddingLeft = UDim.new(0, 5)
+    listPadding.PaddingRight = UDim.new(0, 5)
+    listPadding.PaddingTop = UDim.new(0, 5)
+    listPadding.PaddingBottom = UDim.new(0, 5)
+    listPadding.Parent = logPanel
     
     -- Chat logging variables
     local messageCount = 0
@@ -1730,25 +1738,68 @@ function createChatLogger()
             colour = Color3.fromRGB(0, 100, 255) -- Blue for whispers
         end
         
-        local o = Instance.new("TextLabel")
-        o.Name = "Message_" .. messageCount
-        o.Text = plr.Name .. ": " .. msg
-        o.Size = UDim2.new(1, -10, 0, 20)
-        o.Font = Enum.Font.SourceSans
-        o.TextColor3 = colour
-        o.TextStrokeTransparency = 0
-        o.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
-        o.BackgroundTransparency = 1
-        o.TextSize = 14
-        o.TextXAlignment = Enum.TextXAlignment.Left
-        o.TextYAlignment = Enum.TextYAlignment.Top
-        o.TextWrapped = true
-        o.LayoutOrder = messageCount
-        o.Parent = logPanel
+        -- Create message container
+        local messageFrame = Instance.new("Frame")
+        messageFrame.Name = "Message_" .. messageCount
+        messageFrame.Size = UDim2.new(1, -10, 0, 20)
+        messageFrame.BackgroundTransparency = 1
+        messageFrame.LayoutOrder = messageCount
+        messageFrame.Parent = logPanel
+        
+        -- Player name (blue)
+        local nameLabel = Instance.new("TextLabel")
+        nameLabel.Name = "NameLabel"
+        nameLabel.Size = UDim2.new(0, 0, 1, 0)
+        nameLabel.Position = UDim2.new(0, 0, 0, 0)
+        nameLabel.BackgroundTransparency = 1
+        nameLabel.Text = plr.Name .. ": "
+        nameLabel.TextColor3 = Color3.fromRGB(0, 150, 255) -- Blue
+        nameLabel.TextStrokeTransparency = 0
+        nameLabel.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+        nameLabel.Font = Enum.Font.SourceSansBold
+        nameLabel.TextSize = 14
+        nameLabel.TextXAlignment = Enum.TextXAlignment.Left
+        nameLabel.TextYAlignment = Enum.TextYAlignment.Top
+        nameLabel.AutomaticSize = Enum.AutomaticSize.X
+        nameLabel.Parent = messageFrame
+        
+        -- Message text (color-coded)
+        local msgLabel = Instance.new("TextLabel")
+        msgLabel.Name = "MessageLabel"
+        msgLabel.Size = UDim2.new(1, -nameLabel.AbsoluteSize.X, 1, 0)
+        msgLabel.Position = UDim2.new(0, nameLabel.AbsoluteSize.X, 0, 0)
+        msgLabel.BackgroundTransparency = 1
+        msgLabel.Text = msg
+        msgLabel.TextColor3 = colour
+        msgLabel.TextStrokeTransparency = 0
+        msgLabel.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+        msgLabel.Font = Enum.Font.SourceSans
+        msgLabel.TextSize = 14
+        msgLabel.TextXAlignment = Enum.TextXAlignment.Left
+        msgLabel.TextYAlignment = Enum.TextYAlignment.Top
+        msgLabel.TextWrapped = true
+        msgLabel.Parent = messageFrame
+        
+        -- Update name label size after it calculates
+        nameLabel:GetPropertyChangedSignal("AbsoluteSize"):Connect(function()
+            msgLabel.Size = UDim2.new(1, -nameLabel.AbsoluteSize.X, 1, 0)
+            msgLabel.Position = UDim2.new(0, nameLabel.AbsoluteSize.X, 0, 0)
+        end)
+        
+        -- Adjust frame height if message wraps
+        local textHeight = game:GetService("TextService"):GetTextSize(
+            msg, 
+            14, 
+            Enum.Font.SourceSans, 
+            Vector2.new(msgLabel.AbsoluteSize.X, math.huge)
+        ).Y
+        
+        messageFrame.Size = UDim2.new(1, -10, 0, math.max(20, textHeight + 4))
         
         messageCount = messageCount + 1
         
         -- Update canvas size
+        task.wait()
         logPanel.CanvasSize = UDim2.new(0, 0, 0, listLayout.AbsoluteContentSize.Y + 10)
         
         -- Auto scroll to bottom
@@ -1788,6 +1839,7 @@ function createChatLogger()
             miniBtn.TextTransparency = 1
             closeBtn.TextTransparency = 1
             logPanel.BackgroundTransparency = 1
+            logPanel.Visible = true
             
             TweenService:Create(titleLabel, TweenInfo.new(0.3), {TextTransparency = 0}):Play()
             TweenService:Create(logToggle, TweenInfo.new(0.3), {TextTransparency = 0}):Play()
@@ -1812,6 +1864,8 @@ function createChatLogger()
         
         task.wait(0.2)
         
+        logPanel.Visible = false
+        
         -- Shrink animation
         local shrinkTween = TweenService:Create(chatLogFrame, TweenInfo.new(0.4, Enum.EasingStyle.Back, Enum.EasingDirection.In), {
             Size = UDim2.new(0, 100, 0, 30)
@@ -1833,6 +1887,8 @@ function createChatLogger()
         TweenService:Create(logPanel, TweenInfo.new(0.2), {BackgroundTransparency = 1}):Play()
         
         task.wait(0.2)
+        
+        logPanel.Visible = false
         
         -- Shrink to nothing
         local shrinkTween = TweenService:Create(chatLogFrame, TweenInfo.new(0.4, Enum.EasingStyle.Back, Enum.EasingDirection.In), {
