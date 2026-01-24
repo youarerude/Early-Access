@@ -1750,14 +1750,13 @@ function openChatLogGui()
             })
             expandTween:Play()
             
-            expandTween.Completed:Connect(function()
-                TweenService:Create(titleLabel, TweenInfo.new(0.3), {TextTransparency = 0}):Play()
-                TweenService:Create(logToggle, TweenInfo.new(0.3), {TextTransparency = 0}):Play()
-                TweenService:Create(miniBtn, TweenInfo.new(0.3), {TextTransparency = 0}):Play()
-                TweenService:Create(closeBtn, TweenInfo.new(0.3), {TextTransparency = 0}):Play()
-                TweenService:Create(logPanel, TweenInfo.new(0.3), {BackgroundTransparency = 0}):Play()
-                TweenService:Create(logPanel, TweenInfo.new(0.3), {ScrollBarImageTransparency = 0}):Play()
-            end)
+            -- Immediately start fading in elements
+            TweenService:Create(titleLabel, TweenInfo.new(0.3), {TextTransparency = 0}):Play()
+            TweenService:Create(logToggle, TweenInfo.new(0.3), {TextTransparency = 0}):Play()
+            TweenService:Create(miniBtn, TweenInfo.new(0.3), {TextTransparency = 0}):Play()
+            TweenService:Create(closeBtn, TweenInfo.new(0.3), {TextTransparency = 0}):Play()
+            TweenService:Create(logPanel, TweenInfo.new(0.3), {BackgroundTransparency = 0}):Play()
+            TweenService:Create(logPanel, TweenInfo.new(0.3), {ScrollBarImageTransparency = 0}):Play()
         else
             -- Minimize
             chatMinimized = true
