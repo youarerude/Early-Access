@@ -1724,7 +1724,7 @@ function openChatLogGui()
     -- Log panel
     local logPanel = Instance.new("ScrollingFrame")
     logPanel.Name = "LogPanel"
-    logPanel.Size = UDim2.new(0, 392, 0, 0)
+    logPanel.Size = UDim2.new(0, 392, 0, 203)
     logPanel.Position = UDim2.new(0, 0, 0, 30)
     logPanel.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
     logPanel.BorderColor3 = Color3.fromRGB(57, 57, 57)
@@ -1742,34 +1742,26 @@ function openChatLogGui()
     end)
     
     miniBtn.MouseButton1Click:Connect(function()
-        if chatMinimized then
-            -- Expand
-            chatMinimized = false
-            local expandTween = TweenService:Create(chatLogGui, TweenInfo.new(0.5, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), {
-                Size = UDim2.new(0, 392, 0, 233)
-            })
-            expandTween:Play()
-            
-            -- Immediately start fading in elements
-            TweenService:Create(titleLabel, TweenInfo.new(0.3), {TextTransparency = 0}):Play()
-            TweenService:Create(logToggle, TweenInfo.new(0.3), {TextTransparency = 0}):Play()
-            TweenService:Create(miniBtn, TweenInfo.new(0.3), {TextTransparency = 0}):Play()
-            TweenService:Create(closeBtn, TweenInfo.new(0.3), {TextTransparency = 0}):Play()
-            TweenService:Create(logPanel, TweenInfo.new(0.3), {BackgroundTransparency = 0}):Play()
-            TweenService:Create(logPanel, TweenInfo.new(0.3), {ScrollBarImageTransparency = 0}):Play()
-        else
-            -- Minimize
+        if not chatMinimized then
+            -- MINIMIZE
             chatMinimized = true
-            TweenService:Create(titleLabel, TweenInfo.new(0.2), {TextTransparency = 1}):Play()
-            TweenService:Create(logToggle, TweenInfo.new(0.2), {TextTransparency = 1}):Play()
-            TweenService:Create(miniBtn, TweenInfo.new(0.2), {TextTransparency = 1}):Play()
-            TweenService:Create(closeBtn, TweenInfo.new(0.2), {TextTransparency = 1}):Play()
-            TweenService:Create(logPanel, TweenInfo.new(0.2), {BackgroundTransparency = 1}):Play()
-            TweenService:Create(logPanel, TweenInfo.new(0.2), {ScrollBarImageTransparency = 1}):Play()
             
-            task.wait(0.2)
-            TweenService:Create(chatLogGui, TweenInfo.new(0.5, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), {
-                Size = UDim2.new(0, 100, 0, 30)
+            -- Fade out content
+            TweenService:Create(logPanel, TweenInfo.new(0.2), {
+                BackgroundTransparency = 1,
+                ScrollBarImageTransparency = 1,
+                Size = UDim2.new(0, 392, 0, 0)
+            }):Play()
+            
+        else
+            -- EXPAND
+            chatMinimized = false
+            
+            -- Expand log panel
+            TweenService:Create(logPanel, TweenInfo.new(0.4, Enum.EasingStyle.Sine), {
+                Size = UDim2.new(0, 392, 0, 203),
+                BackgroundTransparency = 0,
+                ScrollBarImageTransparency = 0
             }):Play()
         end
     end)
@@ -1808,8 +1800,11 @@ function openChatLogGui()
         TweenService:Create(logToggle, TweenInfo.new(0.3), {TextTransparency = 0}):Play()
         TweenService:Create(miniBtn, TweenInfo.new(0.3), {TextTransparency = 0}):Play()
         TweenService:Create(closeBtn, TweenInfo.new(0.3), {TextTransparency = 0}):Play()
-        TweenService:Create(logPanel, TweenInfo.new(0.3), {BackgroundTransparency = 0}):Play()
-        TweenService:Create(logPanel, TweenInfo.new(0.3), {ScrollBarImageTransparency = 0}):Play()
+        TweenService:Create(logPanel, TweenInfo.new(0.3), {
+            BackgroundTransparency = 0,
+            ScrollBarImageTransparency = 0,
+            Size = UDim2.new(0, 392, 0, 203)
+        }):Play()
     end)
     
     -- Chat logging functionality
