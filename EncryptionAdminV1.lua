@@ -44,6 +44,11 @@ local chatLogging = true
 local walkflinging = false
 local walkflingConnection = nil
 local walkflingHealthConnection = nil
+local CurrentEmoteTrack = nil
+local emoteSettings = {
+    Speed = 1,
+    StopOnMove = false
+}
 
 -- Create ScreenGui
 local ScreenGui = Instance.new("ScreenGui")
@@ -505,6 +510,44 @@ local Commands = {
         func = function()
             disableWalkfling()
             return true, "Walkfling disabled"
+        end
+    },
+    {
+        name = "√Emote",
+        aliases = "√emote, √animate, √animation",
+        description = "Play emote animation with speed",
+        requiresValue = true,
+        valueType = "string",
+        func = function(value)
+            if not value or value == "" then
+                return false, "Please enter emote ID or URL"
+            end
+            
+            -- Parse emote ID and speed
+            local parts = {}
+            for part in value:gmatch("%S+") do
+                table.insert(parts, part)
+            end
+            
+            local emoteId = parts[1]
+            local speed = tonumber(parts[2]) or 1
+            
+            local success = playEmote(emoteId, speed)
+            if success then
+                return true, "Playing emote (Speed: " .. speed .. ")"
+            else
+                return false, "Failed to load emote"
+            end
+        end
+    },
+    {
+        name = "√StopEmote",
+        aliases = "√stopemote, √UnEmote, √StopAnimate, √StopAnimation",
+        description = "Stop current emote",
+        requiresValue = false,
+        func = function()
+            stopEmote()
+            return true, "Emote stopped"
         end
     },
     {
@@ -2055,6 +2098,91 @@ function disableWalkfling()
     end
 end
 
+-- Emote Functions
+local function extractIdFromInput(input)
+    local num = tonumber(input)
+    if num then
+        return num
+    end
+    
+    local assetIdMatch = string.match(input, "rbxassetid://(%d+)")
+    if assetIdMatch then
+        return tonumber(assetIdMatch)
+    end
+    
+    local catalogMatch = string.match(input, "roblox%.com/catalog/(%d+)")
+    if catalogMatch then
+        return tonumber(catalogMatch)
+    end
+    
+    local libraryMatch = string.match(input, "roblox%.com/library/(%d+)")
+    if libraryMatch then
+        return tonumber(libraryMatch)
+    end
+    
+    local assetMatch = string.match(input, "roblox%.com/asset/%?id=(%d+)")
+    if assetMatch then
+        return tonumber(assetMatch)
+    end
+    
+    return tonumber(input)
+end
+
+function playEmote(input, speed)
+    if not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("Humanoid") then
+        return false
+    end
+    
+    -- Stop current emote if playing
+    if CurrentEmoteTrack then
+        CurrentEmoteTrack:Stop(0)
+        CurrentEmoteTrack = nil
+    end
+    
+    local id = extractIdFromInput(input)
+    if not id then
+        return false
+    end
+    
+    emoteSettings.Speed = speed or 1
+    
+    local animId
+    local ok, result = pcall(function()
+        return game:GetObjects("rbxassetid://" .. tostring(id))
+    end)
+    
+    if ok and result and #result > 0 then
+        local anim = result[1]
+        if anim:IsA("Animation") then
+            animId = anim.AnimationId
+        else
+            animId = "rbxassetid://" .. tostring(id)
+        end
+    else
+        animId = "rbxassetid://" .. tostring(id)
+    end
+    
+    local newAnim = Instance.new("Animation")
+    newAnim.AnimationId = animId
+    
+    local humanoid = LocalPlayer.Character:FindFirstChild("Humanoid")
+    local newTrack = humanoid:LoadAnimation(newAnim)
+    newTrack.Priority = Enum.AnimationPriority.Action4
+    
+    newTrack:Play(0.1, 1, emoteSettings.Speed)
+    
+    CurrentEmoteTrack = newTrack
+    
+    return true
+end
+
+function stopEmote()
+    if CurrentEmoteTrack then
+        CurrentEmoteTrack:Stop(0.1)
+        CurrentEmoteTrack = nil
+    end
+end
+
 function createNotification(message, isSuccess)
     local NotifFrame = Instance.new("Frame")
     NotifFrame.Size = UDim2.new(0, 250, 0, 60)
@@ -2535,6 +2663,11 @@ end
 
 -- Cleanup on character respawn
 LocalPlayer.CharacterAdded:Connect(function(character)
+    -- Stop emote on respawn
+    if CurrentEmoteTrack then
+        CurrentEmoteTrack = nil
+    end
+    
     -- Re-enable noclip if it was enabled
     if noclipEnabled then
         task.wait(0.5)
@@ -2768,7 +2901,9 @@ spawn(function()
         if isOpen then
             local espPartCount = #espPartObjects / 2 -- Divide by 2 because we have highlights + billboards
             
-            if walkflinging then
+            if CurrentEmoteTrack and CurrentEmoteTrack.IsPlaying then
+                updateStatus("Status: Playing Emote (Speed " .. emoteSettings.Speed .. ")", Color3.fromRGB(255, 150, 0))
+            elseif walkflinging then
                 updateStatus("Status: Walkfling Active ⚠️", Color3.fromRGB(255, 100, 0))
             elseif invisibilityEnabled then
                 updateStatus("Status: Invisible Mode Active", Color3.fromRGB(150, 150, 150))
@@ -2846,7 +2981,14 @@ local commandAliases = {
     ["√unwalkfling"] = "√UnWalkfling",
     ["√unfling"] = "√UnWalkfling",
     ["√unwfling"] = "√UnWalkfling",
-    ["√unwalkf"] = "√UnWalkfling"
+    ["√unwalkf"] = "√UnWalkfling",
+    ["√emote"] = "√Emote",
+    ["√animate"] = "√Emote",
+    ["√animation"] = "√Emote",
+    ["√stopemote"] = "√StopEmote",
+    ["√UnEmote"] = "√StopEmote",
+    ["√StopAnimate"] = "√StopEmote",
+    ["√StopAnimation"] = "√StopEmote"
 }
 
 local function resolveAlias(commandName)
