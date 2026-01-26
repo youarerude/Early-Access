@@ -49,6 +49,13 @@ local emoteSettings = {
     Speed = 1,
     StopOnMove = false
 }
+local spawnPoint = nil
+local loopSpeedEnabled = false
+local loopSpeedValue = 16
+local loopSpeedConnection = nil
+local loopJumpPowerEnabled = false
+local loopJumpPowerValue = 50
+local loopJumpPowerConnection = nil
 
 -- Create ScreenGui
 local ScreenGui = Instance.new("ScreenGui")
@@ -551,6 +558,94 @@ local Commands = {
         end
     },
     {
+        name = "√Reset",
+        aliases = "√reset, √Die, √Kill, √Re, √re",
+        description = "Kill yourself (reset)",
+        requiresValue = false,
+        func = function()
+            if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
+                LocalPlayer.Character.Humanoid.Health = 0
+                return true, "Character reset"
+            end
+            return false, "Character not found"
+        end
+    },
+    {
+        name = "√Respawn",
+        aliases = "√respawn, √Resp, √resp",
+        description = "Respawn without losing position",
+        requiresValue = false,
+        func = function()
+            respawnCharacter()
+            return true, "Respawning..."
+        end
+    },
+    {
+        name = "√SetSpawnPoint",
+        aliases = "√setspawnpoint, √SetSpawn, √SpawnPoint",
+        description = "Set spawn point at current position",
+        requiresValue = false,
+        func = function()
+            if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+                spawnPoint = LocalPlayer.Character.HumanoidRootPart.CFrame
+                return true, "Spawn point set at current location"
+            end
+            return false, "Character not found"
+        end
+    },
+    {
+        name = "√LoopSpeed",
+        aliases = "√loopspeed, √LoopWS, √repeatspeed",
+        description = "Loop set speed every 0.1 seconds",
+        requiresValue = true,
+        valueType = "number",
+        func = function(value)
+            local speed = tonumber(value)
+            if not speed then
+                return false, "Invalid speed value"
+            end
+            
+            enableLoopSpeed(speed)
+            return true, "Loop speed enabled: " .. speed
+        end
+    },
+    {
+        name = "√UnLoopSpeed",
+        aliases = "√unloopspeed, √UnLoopWS, √unrepeatspeed",
+        description = "Stop loop speed",
+        requiresValue = false,
+        func = function()
+            disableLoopSpeed()
+            return true, "Loop speed disabled"
+        end
+    },
+    {
+        name = "√LoopJumpPower",
+        aliases = "√loopjumppower, √LoopJP, √repeatjumppower",
+        description = "Loop set jump power every 0.1 seconds",
+        requiresValue = true,
+        valueType = "number",
+        func = function(value)
+            local power = tonumber(value)
+            if not power then
+                return false, "Invalid jump power value"
+            end
+            
+            enableLoopJumpPower(power)
+            return true, "Loop jump power enabled: " .. power
+        end
+    },
+    {
+        name = "√UnLoopJumpPower",
+        aliases = "√unloopjumppower, √UnLoopJP, √unrepeatjumppower",
+        description = "Stop loop jump power",
+        requiresValue = false,
+        func = function()
+            disableLoopJumpPower()
+            return true, "Loop jump power disabled"
+        end
+    },
+    {
         name = "√Headsit",
         aliases = "√hsit, √headt, √hs",
         description = "Sit on a player's head",
@@ -948,7 +1043,7 @@ function enableESP()
             local billboard = Instance.new("BillboardGui")
             billboard.Name = "ESPBillboard"
             billboard.Adornee = humanoidRootPart
-            billboard.Size = UDim2.new(0, 200, 0, 100)
+            billboard.Size = UDim2.new(0, 150, 0, 60)
             billboard.StudsOffset = Vector3.new(0, 3, 0)
             billboard.AlwaysOnTop = true
             billboard.Parent = humanoidRootPart
@@ -972,7 +1067,7 @@ function enableESP()
             textLabel.Position = UDim2.new(0, 5, 0, 5)
             textLabel.BackgroundTransparency = 1
             textLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-            textLabel.TextSize = 14
+            textLabel.TextSize = 12
             textLabel.Font = Enum.Font.GothamBold
             textLabel.TextWrapped = true
             textLabel.TextYAlignment = Enum.TextYAlignment.Top
@@ -1133,7 +1228,7 @@ function enableESPPart(partName)
             end
         end
         
-        -- Create highlight
+        -- Create highlight for the part
         local highlight = Instance.new("Highlight")
         highlight.Name = "ESPPartHighlight"
         highlight.Adornee = isModel and obj or obj.Parent
@@ -1153,7 +1248,7 @@ function enableESPPart(partName)
                 local billboard = Instance.new("BillboardGui")
                 billboard.Name = "ESPPartBillboard"
                 billboard.Adornee = targetPart
-                billboard.Size = UDim2.new(0, 150, 0, 50)
+                billboard.Size = UDim2.new(0, 120, 0, 50)
                 billboard.StudsOffset = Vector3.new(0, 2, 0)
                 billboard.AlwaysOnTop = true
                 billboard.Parent = targetPart
@@ -1175,7 +1270,7 @@ function enableESPPart(partName)
                 textLabel.Position = UDim2.new(0, 5, 0, 5)
                 textLabel.BackgroundTransparency = 1
                 textLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-                textLabel.TextSize = 14
+                textLabel.TextSize = 11
                 textLabel.Font = Enum.Font.GothamBold
                 textLabel.TextWrapped = true
                 textLabel.Parent = bgFrame
@@ -2183,6 +2278,113 @@ function stopEmote()
     end
 end
 
+function respawnCharacter()
+    local char = LocalPlayer.Character
+    if not char then return end
+    
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    if not hrp then return end
+    
+    local ogpos = hrp.CFrame
+    local ogpos2 = workspace.CurrentCamera.CFrame
+    
+    -- Check if game has character deletion protection
+    local faggot = false
+    pcall(function()
+        faggot = gethiddenproperty and gethiddenproperty(workspace, "RejectCharacterDeletions") ~= Enum.RejectCharacterDeletions.Disabled
+    end)
+    
+    if faggot and replicatesignal then
+        pcall(function()
+            replicatesignal(LocalPlayer.ConnectDiedSignalBackend)
+        end)
+        task.wait(Players.RespawnTime - 0.1)
+        pcall(function()
+            replicatesignal(LocalPlayer.Kill)
+        end)
+    else
+        -- Standard respawn method
+        local hum = char:FindFirstChildWhichIsA("Humanoid")
+        if hum then
+            hum:ChangeState(Enum.HumanoidStateType.Dead)
+        end
+        char:ClearAllChildren()
+        
+        local newgen = Instance.new("Model")
+        newgen.Parent = workspace
+        LocalPlayer.Character = newgen
+        task.wait()
+        LocalPlayer.Character = char
+        newgen:Destroy()
+    end
+    
+    -- Restore position
+    task.spawn(function()
+        local newChar = LocalPlayer.CharacterAdded:Wait()
+        newChar:WaitForChild("HumanoidRootPart").CFrame = ogpos
+        workspace.CurrentCamera.CFrame = ogpos2
+    end)
+end
+
+function enableLoopSpeed(speed)
+    loopSpeedValue = speed
+    loopSpeedEnabled = true
+    
+    -- Disconnect old connection if exists
+    if loopSpeedConnection then
+        loopSpeedConnection:Disconnect()
+    end
+    
+    -- Create loop
+    loopSpeedConnection = RunService.Heartbeat:Connect(function()
+        if loopSpeedEnabled and LocalPlayer.Character then
+            local humanoid = LocalPlayer.Character:FindFirstChild("Humanoid")
+            if humanoid then
+                humanoid.WalkSpeed = loopSpeedValue
+            end
+        end
+    end)
+end
+
+function disableLoopSpeed()
+    loopSpeedEnabled = false
+    
+    if loopSpeedConnection then
+        loopSpeedConnection:Disconnect()
+        loopSpeedConnection = nil
+    end
+end
+
+function enableLoopJumpPower(power)
+    loopJumpPowerValue = power
+    loopJumpPowerEnabled = true
+    
+    -- Disconnect old connection if exists
+    if loopJumpPowerConnection then
+        loopJumpPowerConnection:Disconnect()
+    end
+    
+    -- Create loop
+    loopJumpPowerConnection = RunService.Heartbeat:Connect(function()
+        if loopJumpPowerEnabled and LocalPlayer.Character then
+            local humanoid = LocalPlayer.Character:FindFirstChild("Humanoid")
+            if humanoid then
+                humanoid.UseJumpPower = true
+                humanoid.JumpPower = loopJumpPowerValue
+            end
+        end
+    end)
+end
+
+function disableLoopJumpPower()
+    loopJumpPowerEnabled = false
+    
+    if loopJumpPowerConnection then
+        loopJumpPowerConnection:Disconnect()
+        loopJumpPowerConnection = nil
+    end
+end
+
 function createNotification(message, isSuccess)
     local NotifFrame = Instance.new("Frame")
     NotifFrame.Size = UDim2.new(0, 250, 0, 60)
@@ -2668,6 +2870,24 @@ LocalPlayer.CharacterAdded:Connect(function(character)
         CurrentEmoteTrack = nil
     end
     
+    -- Teleport to spawn point if set
+    if spawnPoint then
+        task.wait(0.5)
+        character:WaitForChild("HumanoidRootPart").CFrame = spawnPoint
+    end
+    
+    -- Re-enable loop speed if it was enabled
+    if loopSpeedEnabled then
+        task.wait(0.3)
+        enableLoopSpeed(loopSpeedValue)
+    end
+    
+    -- Re-enable loop jump power if it was enabled
+    if loopJumpPowerEnabled then
+        task.wait(0.3)
+        enableLoopJumpPower(loopJumpPowerValue)
+    end
+    
     -- Re-enable noclip if it was enabled
     if noclipEnabled then
         task.wait(0.5)
@@ -2901,7 +3121,13 @@ spawn(function()
         if isOpen then
             local espPartCount = #espPartObjects / 2 -- Divide by 2 because we have highlights + billboards
             
-            if CurrentEmoteTrack and CurrentEmoteTrack.IsPlaying then
+            if loopSpeedEnabled and loopJumpPowerEnabled then
+                updateStatus("Status: Loop Speed (" .. loopSpeedValue .. ") + JP (" .. loopJumpPowerValue .. ")", Color3.fromRGB(0, 255, 150))
+            elseif loopSpeedEnabled then
+                updateStatus("Status: Loop Speed (" .. loopSpeedValue .. ")", Color3.fromRGB(0, 255, 150))
+            elseif loopJumpPowerEnabled then
+                updateStatus("Status: Loop Jump Power (" .. loopJumpPowerValue .. ")", Color3.fromRGB(0, 255, 150))
+            elseif CurrentEmoteTrack and CurrentEmoteTrack.IsPlaying then
                 updateStatus("Status: Playing Emote (Speed " .. emoteSettings.Speed .. ")", Color3.fromRGB(255, 150, 0))
             elseif walkflinging then
                 updateStatus("Status: Walkfling Active ⚠️", Color3.fromRGB(255, 100, 0))
@@ -2988,7 +3214,30 @@ local commandAliases = {
     ["√stopemote"] = "√StopEmote",
     ["√UnEmote"] = "√StopEmote",
     ["√StopAnimate"] = "√StopEmote",
-    ["√StopAnimation"] = "√StopEmote"
+    ["√StopAnimation"] = "√StopEmote",
+    ["√reset"] = "√Reset",
+    ["√Die"] = "√Reset",
+    ["√Kill"] = "√Reset",
+    ["√Re"] = "√Reset",
+    ["√re"] = "√Reset",
+    ["√respawn"] = "√Respawn",
+    ["√Resp"] = "√Respawn",
+    ["√resp"] = "√Respawn",
+    ["√setspawnpoint"] = "√SetSpawnPoint",
+    ["√SetSpawn"] = "√SetSpawnPoint",
+    ["√SpawnPoint"] = "√SetSpawnPoint",
+    ["√loopspeed"] = "√LoopSpeed",
+    ["√LoopWS"] = "√LoopSpeed",
+    ["√repeatspeed"] = "√LoopSpeed",
+    ["√unloopspeed"] = "√UnLoopSpeed",
+    ["√UnLoopWS"] = "√UnLoopSpeed",
+    ["√unrepeatspeed"] = "√UnLoopSpeed",
+    ["√loopjumppower"] = "√LoopJumpPower",
+    ["√LoopJP"] = "√LoopJumpPower",
+    ["√repeatjumppower"] = "√LoopJumpPower",
+    ["√unloopjumppower"] = "√UnLoopJumpPower",
+    ["√UnLoopJP"] = "√UnLoopJumpPower",
+    ["√unrepeatjumppower"] = "√UnLoopJumpPower"
 }
 
 local function resolveAlias(commandName)
@@ -3177,6 +3426,8 @@ ScreenGui.AncestryChanged:Connect(function()
         disableESPPart()
         disableInvisibility()
         disableWalkfling()
+        disableLoopSpeed()
+        disableLoopJumpPower()
         if noclipConnection then
             noclipConnection:Disconnect()
         end
