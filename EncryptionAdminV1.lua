@@ -62,13 +62,6 @@ local spectating = false
 local spectateTarget = nil
 local spectateConnection = nil
 
--- NEW VEHICLEFLY VARIABLES
-local vehicleFlyEnabled = false
-local vehicleFlySpeed = 50
-local vehicleFlyConnection = nil
-local vVelocity = nil
-local vGyro = nil
-
 -- Create ScreenGui
 local ScreenGui = Instance.new("ScreenGui")
 ScreenGui.Name = "EncryptionAdmin"
@@ -668,20 +661,6 @@ local Commands = {
         end
     },
     {
-        name = "√UnFPS",
-        aliases = "√unfps",
-        description = "Remove FPS counter",
-        requiresValue = false,
-        func = function()
-            if fpsCounter then
-                toggleFPS()
-                return true, "FPS counter removed"
-            else
-                return false, "FPS counter is not active"
-            end
-        end
-    },
-    {
         name = "√View",
         aliases = "√view, √Spectate",
         description = "Spectate a player",
@@ -736,21 +715,6 @@ local Commands = {
             removeArms()
             removeLegs()
             return true, "Bean mode activated - All limbs removed"
-        end
-    },
-    {
-        name = "√Chat",
-        aliases = "√chat, √Say",
-        description = "Force chat a message",
-        requiresValue = true,
-        valueType = "string",
-        func = function(value)
-            if not value or value == "" then
-                return false, "Please enter a message to chat"
-            end
-            
-            forceChat(value)
-            return true, "Sent: " .. value
         end
     },
     {
@@ -839,28 +803,6 @@ local Commands = {
             else
                 return false, "Failed to load Infinite Yield: " .. tostring(err)
             end
-        end
-    },
-    -- NEW VEHICLEFLY COMMANDS
-    {
-        name = "√VehicleFly",
-        aliases = "√vehiclefly, √VFly, √vfly",
-        description = "Fly in any vehicle/seat - Pitch always ON",
-        requiresValue = true,
-        valueType = "number",
-        func = function(value)
-            local success, msg = enableVehicleFly(value)
-            return success, msg or "VehicleFly enabled"
-        end
-    },
-    {
-        name = "√UnVehicleFly",
-        aliases = "√unvehiclefly, √UnVFly, √unvfly",
-        description = "Disable vehicle fly",
-        requiresValue = false,
-        func = function()
-            disableVehicleFly()
-            return true, "VehicleFly disabled"
         end
     }
 }
@@ -1028,24 +970,24 @@ function enableFly(speed)
             return
         end
         
-        if flyControl.l + flyControl.r \~= 0 or flyControl.f + flyControl.b \~= 0 then
+        if flyControl.l + flyControl.r ~= 0 or flyControl.f + flyControl.b ~= 0 then
             currentSpeed = currentSpeed + 0.5 + (currentSpeed / maxspeed)
             if currentSpeed > maxspeed then
                 currentSpeed = maxspeed
             end
-        elseif not (flyControl.l + flyControl.r \~= 0 or flyControl.f + flyControl.b \~= 0) and currentSpeed \~= 0 then
+        elseif not (flyControl.l + flyControl.r ~= 0 or flyControl.f + flyControl.b ~= 0) and currentSpeed ~= 0 then
             currentSpeed = currentSpeed - 1
             if currentSpeed < 0 then
                 currentSpeed = 0
             end
         end
         
-        if (flyControl.l + flyControl.r) \~= 0 or (flyControl.f + flyControl.b) \~= 0 then
+        if (flyControl.l + flyControl.r) ~= 0 or (flyControl.f + flyControl.b) ~= 0 then
             flyBv.velocity = ((workspace.CurrentCamera.CoordinateFrame.lookVector * (flyControl.f + flyControl.b)) + 
                 ((workspace.CurrentCamera.CoordinateFrame * CFrame.new(flyControl.l + flyControl.r, (flyControl.f + flyControl.b) * 0.2, 0).p) - 
                 workspace.CurrentCamera.CoordinateFrame.p)) * currentSpeed
             lastctrl = {f = flyControl.f, b = flyControl.b, l = flyControl.l, r = flyControl.r}
-        elseif (flyControl.l + flyControl.r) == 0 and (flyControl.f + flyControl.b) == 0 and currentSpeed \~= 0 then
+        elseif (flyControl.l + flyControl.r) == 0 and (flyControl.f + flyControl.b) == 0 and currentSpeed ~= 0 then
             flyBv.velocity = ((workspace.CurrentCamera.CoordinateFrame.lookVector * (lastctrl.f + lastctrl.b)) + 
                 ((workspace.CurrentCamera.CoordinateFrame * CFrame.new(lastctrl.l + lastctrl.r, (lastctrl.f + lastctrl.b) * 0.2, 0).p) - 
                 workspace.CurrentCamera.CoordinateFrame.p)) * currentSpeed
@@ -1099,83 +1041,6 @@ function disableFly()
         end
         
         chr.Animate.Disabled = false
-    end
-end
-
--- NEW VEHICLEFLY FUNCTIONS (Pitch ALWAYS ON)
-function enableVehicleFly(speed)
-    if vehicleFlyEnabled then
-        disableVehicleFly()
-    end
-    
-    vehicleFlyEnabled = true
-    vehicleFlySpeed = tonumber(speed) or 50
-    if vehicleFlySpeed < 10 then vehicleFlySpeed = 10 end
-    
-    local character = LocalPlayer.Character
-    if not character or not character:FindFirstChild("HumanoidRootPart") then
-        vehicleFlyEnabled = false
-        return false, "No character found"
-    end
-    
-    local root = character.HumanoidRootPart
-    
-    -- Cleanup old instances
-    if vVelocity then vVelocity:Destroy() end
-    if vGyro then vGyro:Destroy() end
-    
-    vVelocity = Instance.new("BodyVelocity")
-    vVelocity.Name = "EncryptionVehicleFlyVel"
-    vVelocity.MaxForce = Vector3.new(9e9, 9e9, 9e9)
-    vVelocity.Velocity = Vector3.new(0, 0.1, 0)
-    vVelocity.Parent = root
-    
-    vGyro = Instance.new("BodyGyro")
-    vGyro.Name = "EncryptionVehicleFlyGyro"
-    vGyro.MaxTorque = Vector3.new(9e9, 9e9, 9e9)
-    vGyro.P = 1250
-    vGyro.D = 50
-    vGyro.CFrame = root.CFrame
-    vGyro.Parent = root
-    
-    -- Main loop - Pitch ALWAYS ON
-    vehicleFlyConnection = RunService.RenderStepped:Connect(function()
-        if not vehicleFlyEnabled or not root.Parent then return end
-        
-        local cam = workspace.CurrentCamera
-        local move = Vector3.new()
-        
-        if UserInputService:IsKeyDown(Enum.KeyCode.W) then move += cam.CFrame.LookVector end
-        if UserInputService:IsKeyDown(Enum.KeyCode.S) then move -= cam.CFrame.LookVector end
-        if UserInputService:IsKeyDown(Enum.KeyCode.A) then move -= cam.CFrame.RightVector end
-        if UserInputService:IsKeyDown(Enum.KeyCode.D) then move += cam.CFrame.RightVector end
-        if UserInputService:IsKeyDown(Enum.KeyCode.Space) then move += Vector3.new(0,1,0) end
-        if UserInputService:IsKeyDown(Enum.KeyCode.LeftControl) then move -= Vector3.new(0,1,0) end
-        
-        local finalVel = move.Magnitude > 0 and move.Unit * vehicleFlySpeed * 7 or Vector3.new(0, 0.1, 0)
-        
-        vVelocity.Velocity = finalVel
-        vGyro.CFrame = cam.CFrame  -- Pitch always ON
-    end)
-    
-    return true, "VehicleFly enabled (Speed: " .. vehicleFlySpeed .. ") - Pitch always ON"
-end
-
-function disableVehicleFly()
-    vehicleFlyEnabled = false
-    
-    if vehicleFlyConnection then
-        vehicleFlyConnection:Disconnect()
-        vehicleFlyConnection = nil
-    end
-    
-    if vVelocity then 
-        vVelocity:Destroy() 
-        vVelocity = nil 
-    end
-    if vGyro then 
-        vGyro:Destroy() 
-        vGyro = nil 
     end
 end
 
@@ -2300,7 +2165,7 @@ function enableWalkfling()
     
     -- Disable collision with other players
     for _, player in pairs(Players:GetPlayers()) do
-        if player \~= LocalPlayer and player.Character then
+        if player ~= LocalPlayer and player.Character then
             for _, part in pairs(player.Character:GetDescendants()) do
                 if part:IsA("BasePart") then
                     part.CanCollide = false
@@ -2371,7 +2236,7 @@ function disableWalkfling()
     
     -- Re-enable collision with other players
     for _, player in pairs(Players:GetPlayers()) do
-        if player \~= LocalPlayer and player.Character then
+        if player ~= LocalPlayer and player.Character then
             for _, part in pairs(player.Character:GetDescendants()) do
                 if part:IsA("BasePart") then
                     part.CanCollide = true
@@ -2498,7 +2363,7 @@ function respawnCharacter()
     -- Check if game has character deletion protection
     local faggot = false
     pcall(function()
-        faggot = gethiddenproperty and gethiddenproperty(workspace, "RejectCharacterDeletions") \~= Enum.RejectCharacterDeletions.Disabled
+        faggot = gethiddenproperty and gethiddenproperty(workspace, "RejectCharacterDeletions") ~= Enum.RejectCharacterDeletions.Disabled
     end)
     
     if faggot and replicatesignal then
@@ -2764,38 +2629,6 @@ function removeLegs()
     end
 end
 
-function forceChat(message)
-    -- Try TextChatService first (new chat)
-    local success = pcall(function()
-        local TextChatService = game:GetService("TextChatService")
-        local chatInputBarConfiguration = TextChatService:FindFirstChild("ChatInputBarConfiguration")
-        if chatInputBarConfiguration then
-            local textChannel = chatInputBarConfiguration:FindFirstChild("TargetTextChannel")
-            if textChannel then
-                textChannel:SendAsync(message)
-                return
-            end
-        end
-        
-        -- Alternative method for new chat
-        local channels = TextChatService:FindFirstChild("TextChannels")
-        if channels then
-            local rbxGeneral = channels:FindFirstChild("RBXGeneral")
-            if rbxGeneral then
-                rbxGeneral:SendAsync(message)
-                return
-            end
-        end
-    end)
-    
-    -- Fallback to legacy chat
-    if not success then
-        pcall(function()
-            game:GetService("ReplicatedStorage").DefaultChatSystemChatEvents.SayMessageRequest:FireServer(message, "All")
-        end)
-    end
-end
-
 function createNotification(message, isSuccess)
     local NotifFrame = Instance.new("Frame")
     NotifFrame.Size = UDim2.new(0, 250, 0, 60)
@@ -2963,7 +2796,7 @@ function executeCommand(commandData)
     end
     
     -- Save last executed command (except PreviousCommand itself)
-    if commandData.name \~= "√PreviousCommand" then
+    if commandData.name ~= "√PreviousCommand" then
         lastExecutedCommand = commandData.func
         lastExecutedValue = value
     end
@@ -2990,7 +2823,7 @@ function populateCommands(filterText)
     for index, commandData in ipairs(Commands) do
         local shouldShow = true
         
-        if filterText \~= "" then
+        if filterText ~= "" then
             local commandNameLower = commandData.name:lower()
             local commandDescLower = commandData.description:lower()
             local aliasesLower = (commandData.aliases or ""):lower()
@@ -3037,7 +2870,7 @@ function executeFromSearch(text)
     
     for _, commandData in ipairs(Commands) do
         if commandData.name:lower() == commandName:lower() then
-            if commandData.requiresValue and value and value \~= "" then
+            if commandData.requiresValue and value and value ~= "" then
                 local success, message = commandData.func(value)
                 createNotification(message, success)
             elseif not commandData.requiresValue then
@@ -3318,12 +3151,6 @@ LocalPlayer.CharacterAdded:Connect(function(character)
         enableFly(savedSpeed)
     end
     
-    -- Re-enable VehicleFly if it was enabled
-    if vehicleFlyEnabled then
-        task.wait(0.6)
-        enableVehicleFly(vehicleFlySpeed)
-    end
-    
     -- Re-enable invisibility if it was enabled
     if invisibilityEnabled then
         disableInvisibility()
@@ -3393,7 +3220,7 @@ ScreenGui:GetPropertyChangedSignal("AbsoluteSize"):Connect(updateGUISize)
 
 -- Additional command parsing for value input
 ValueInput.FocusLost:Connect(function(enterPressed)
-    if enterPressed and ValueInput.Text \~= "" then
+    if enterPressed and ValueInput.Text ~= "" then
         -- Auto-detect last searched command or first visible command
         local lastCommand = nil
         
@@ -3565,8 +3392,6 @@ spawn(function()
                 updateStatus("Status: Player ESP Active (" .. playerCount .. " players)", Color3.fromRGB(255, 0, 255))
             elseif flyEnabled then
                 updateStatus("Status: Flying (Speed " .. flySpeed .. ")", Color3.fromRGB(0, 200, 255))
-            elseif vehicleFlyEnabled then
-                updateStatus("Status: VehicleFly (Speed " .. vehicleFlySpeed .. ")", Color3.fromRGB(255, 165, 0))
             elseif noclipEnabled then
                 updateStatus("Status: Noclip Active", Color3.fromRGB(255, 200, 0))
             else
@@ -3663,7 +3488,6 @@ local commandAliases = {
     ["√UnLoopJP"] = "√UnLoopJumpPower",
     ["√unrepeatjumppower"] = "√UnLoopJumpPower",
     ["√fps"] = "√FPS",
-    ["√unfps"] = "√UnFPS",
     ["√view"] = "√View",
     ["√Spectate"] = "√View",
     ["√unview"] = "√UnView",
@@ -3671,15 +3495,7 @@ local commandAliases = {
     ["√noarms"] = "√NoArms",
     ["√nolegs"] = "√NoLegs",
     ["√bean"] = "√Bean",
-    ["√Limbless"] = "√Bean",
-    ["√chat"] = "√Chat",
-    ["√Say"] = "√Chat",
-    ["√vehiclefly"] = "√VehicleFly",
-    ["√VFly"] = "√VehicleFly",
-    ["√vfly"] = "√VehicleFly",
-    ["√unvehiclefly"] = "√UnVehicleFly",
-    ["√UnVFly"] = "√UnVehicleFly",
-    ["√unvfly"] = "√UnVehicleFly"
+    ["√Limbless"] = "√Bean"
 }
 
 local function resolveAlias(commandName)
@@ -3693,7 +3509,7 @@ executeFromSearch = function(text)
     
     if commandName then
         commandName = resolveAlias(commandName)
-        if value and value \~= "" then
+        if value and value ~= "" then
             text = commandName .. " " .. value
         else
             text = commandName
@@ -3779,13 +3595,33 @@ spawn(function()
     end
 end)
 
+-- Additional utility commands that can be added later
+local utilityFunctions = {
+    resetCharacter = function()
+        if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
+            LocalPlayer.Character.Humanoid.Health = 0
+            return true, "Character reset"
+        end
+        return false, "No character found"
+    end,
+    
+    clearNotifications = function()
+        for _, child in ipairs(ScreenGui:GetChildren()) do
+            if child.Name == "Frame" and child ~= MainFrame then
+                child:Destroy()
+            end
+        end
+        return true, "Notifications cleared"
+    end
+}
+
 -- Version display
 local VersionLabel = Instance.new("TextLabel")
 VersionLabel.Name = "VersionLabel"
 VersionLabel.Size = UDim2.new(0, 100, 0, 15)
 VersionLabel.Position = UDim2.new(1, -110, 1, -20)
 VersionLabel.BackgroundTransparency = 1
-VersionLabel.Text = "v1.0 Alpha - VehicleFly Added"
+VersionLabel.Text = "v1.0 Alpha"
 VersionLabel.TextColor3 = Color3.fromRGB(100, 100, 100)
 VersionLabel.TextSize = 10
 VersionLabel.Font = Enum.Font.Gotham
@@ -3795,6 +3631,30 @@ VersionLabel.Parent = MainFrame
 -- Initialize with first notification
 task.wait(1)
 createNotification("Encryption Admin loaded! Press [A] or swipe down to open.", true)
+
+-- Auto-save preferences (mock implementation for future expansion)
+local preferences = {
+    theme = "blue",
+    autoNoclip = false,
+    defaultSpeed = 16,
+    defaultJumpPower = 50
+}
+
+local function savePreferences()
+    -- In a real implementation, this would save to DataStore
+    -- For exploits, this might use writefile/readfile
+end
+
+local function loadPreferences()
+    -- Load saved preferences
+end
+
+-- Command suggestions dropdown (future enhancement placeholder)
+local suggestions = {}
+
+local function showSuggestions(query)
+    -- This would show a dropdown of matching commands
+end
 
 -- Final initialization
 print("[Encryption Admin] Initialized successfully")
@@ -3820,7 +3680,6 @@ ScreenGui.AncestryChanged:Connect(function()
     if not ScreenGui.Parent then
         disableNoclip()
         disableFly()
-        disableVehicleFly()
         disableESP()
         disableESPPart()
         disableInvisibility()
