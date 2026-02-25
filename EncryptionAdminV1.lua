@@ -687,6 +687,37 @@ local Commands = {
         end
     },
     {
+        name = "√NoArms",
+        aliases = "√noarms",
+        description = "Remove both arms",
+        requiresValue = false,
+        func = function()
+            removeArms()
+            return true, "Arms removed"
+        end
+    },
+    {
+        name = "√NoLegs",
+        aliases = "√nolegs",
+        description = "Remove both legs",
+        requiresValue = false,
+        func = function()
+            removeLegs()
+            return true, "Legs removed"
+        end
+    },
+    {
+        name = "√Bean",
+        aliases = "√bean, √Limbless",
+        description = "Remove all limbs (bean mode)",
+        requiresValue = false,
+        func = function()
+            removeArms()
+            removeLegs()
+            return true, "Bean mode activated - All limbs removed"
+        end
+    },
+    {
         name = "√Headsit",
         aliases = "√hsit, √headt, √hs",
         description = "Sit on a player's head",
@@ -2524,6 +2555,80 @@ function stopSpectating()
     end
 end
 
+function removeArms()
+    if not LocalPlayer.Character then
+        return
+    end
+    
+    local char = LocalPlayer.Character
+    
+    -- R6 and R15 support
+    local leftArm = char:FindFirstChild("Left Arm") or char:FindFirstChild("LeftUpperArm")
+    local rightArm = char:FindFirstChild("Right Arm") or char:FindFirstChild("RightUpperArm")
+    
+    if leftArm then
+        leftArm:Destroy()
+    end
+    
+    if rightArm then
+        rightArm:Destroy()
+    end
+    
+    -- R15 additional parts
+    if char:FindFirstChild("LeftLowerArm") then
+        char.LeftLowerArm:Destroy()
+    end
+    
+    if char:FindFirstChild("LeftHand") then
+        char.LeftHand:Destroy()
+    end
+    
+    if char:FindFirstChild("RightLowerArm") then
+        char.RightLowerArm:Destroy()
+    end
+    
+    if char:FindFirstChild("RightHand") then
+        char.RightHand:Destroy()
+    end
+end
+
+function removeLegs()
+    if not LocalPlayer.Character then
+        return
+    end
+    
+    local char = LocalPlayer.Character
+    
+    -- R6 and R15 support
+    local leftLeg = char:FindFirstChild("Left Leg") or char:FindFirstChild("LeftUpperLeg")
+    local rightLeg = char:FindFirstChild("Right Leg") or char:FindFirstChild("RightUpperLeg")
+    
+    if leftLeg then
+        leftLeg:Destroy()
+    end
+    
+    if rightLeg then
+        rightLeg:Destroy()
+    end
+    
+    -- R15 additional parts
+    if char:FindFirstChild("LeftLowerLeg") then
+        char.LeftLowerLeg:Destroy()
+    end
+    
+    if char:FindFirstChild("LeftFoot") then
+        char.LeftFoot:Destroy()
+    end
+    
+    if char:FindFirstChild("RightLowerLeg") then
+        char.RightLowerLeg:Destroy()
+    end
+    
+    if char:FindFirstChild("RightFoot") then
+        char.RightFoot:Destroy()
+    end
+end
+
 function createNotification(message, isSuccess)
     local NotifFrame = Instance.new("Frame")
     NotifFrame.Size = UDim2.new(0, 250, 0, 60)
@@ -3386,7 +3491,11 @@ local commandAliases = {
     ["√view"] = "√View",
     ["√Spectate"] = "√View",
     ["√unview"] = "√UnView",
-    ["√UnSpectate"] = "√UnView"
+    ["√UnSpectate"] = "√UnView",
+    ["√noarms"] = "√NoArms",
+    ["√nolegs"] = "√NoLegs",
+    ["√bean"] = "√Bean",
+    ["√Limbless"] = "√Bean"
 }
 
 local function resolveAlias(commandName)
