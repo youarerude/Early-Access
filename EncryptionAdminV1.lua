@@ -661,6 +661,20 @@ local Commands = {
         end
     },
     {
+        name = "√UnFPS",
+        aliases = "√unfps",
+        description = "Remove FPS counter",
+        requiresValue = false,
+        func = function()
+            if fpsCounter then
+                toggleFPS()
+                return true, "FPS counter removed"
+            else
+                return false, "FPS counter is not active"
+            end
+        end
+    },
+    {
         name = "√View",
         aliases = "√view, √Spectate",
         description = "Spectate a player",
@@ -715,6 +729,21 @@ local Commands = {
             removeArms()
             removeLegs()
             return true, "Bean mode activated - All limbs removed"
+        end
+    },
+    {
+        name = "√Chat",
+        aliases = "√chat, √Say",
+        description = "Force chat a message",
+        requiresValue = true,
+        valueType = "string",
+        func = function(value)
+            if not value or value == "" then
+                return false, "Please enter a message to chat"
+            end
+            
+            forceChat(value)
+            return true, "Sent: " .. value
         end
     },
     {
@@ -2629,6 +2658,38 @@ function removeLegs()
     end
 end
 
+function forceChat(message)
+    -- Try TextChatService first (new chat)
+    local success = pcall(function()
+        local TextChatService = game:GetService("TextChatService")
+        local chatInputBarConfiguration = TextChatService:FindFirstChild("ChatInputBarConfiguration")
+        if chatInputBarConfiguration then
+            local textChannel = chatInputBarConfiguration:FindFirstChild("TargetTextChannel")
+            if textChannel then
+                textChannel:SendAsync(message)
+                return
+            end
+        end
+        
+        -- Alternative method for new chat
+        local channels = TextChatService:FindFirstChild("TextChannels")
+        if channels then
+            local rbxGeneral = channels:FindFirstChild("RBXGeneral")
+            if rbxGeneral then
+                rbxGeneral:SendAsync(message)
+                return
+            end
+        end
+    end)
+    
+    -- Fallback to legacy chat
+    if not success then
+        pcall(function()
+            game:GetService("ReplicatedStorage").DefaultChatSystemChatEvents.SayMessageRequest:FireServer(message, "All")
+        end)
+    end
+end
+
 function createNotification(message, isSuccess)
     local NotifFrame = Instance.new("Frame")
     NotifFrame.Size = UDim2.new(0, 250, 0, 60)
@@ -3488,6 +3549,7 @@ local commandAliases = {
     ["√UnLoopJP"] = "√UnLoopJumpPower",
     ["√unrepeatjumppower"] = "√UnLoopJumpPower",
     ["√fps"] = "√FPS",
+    ["√unfps"] = "√UnFPS",
     ["√view"] = "√View",
     ["√Spectate"] = "√View",
     ["√unview"] = "√UnView",
@@ -3495,7 +3557,9 @@ local commandAliases = {
     ["√noarms"] = "√NoArms",
     ["√nolegs"] = "√NoLegs",
     ["√bean"] = "√Bean",
-    ["√Limbless"] = "√Bean"
+    ["√Limbless"] = "√Bean",
+    ["√chat"] = "√Chat",
+    ["√Say"] = "√Chat"
 }
 
 local function resolveAlias(commandName)
