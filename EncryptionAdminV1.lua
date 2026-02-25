@@ -56,6 +56,11 @@ local loopSpeedConnection = nil
 local loopJumpPowerEnabled = false
 local loopJumpPowerValue = 50
 local loopJumpPowerConnection = nil
+local fpsCounter = nil
+local fpsConnection = nil
+local spectating = false
+local spectateTarget = nil
+local spectateConnection = nil
 
 -- Create ScreenGui
 local ScreenGui = Instance.new("ScreenGui")
@@ -643,6 +648,42 @@ local Commands = {
         func = function()
             disableLoopJumpPower()
             return true, "Loop jump power disabled"
+        end
+    },
+    {
+        name = "√FPS",
+        aliases = "√fps",
+        description = "Toggle FPS counter display",
+        requiresValue = false,
+        func = function()
+            toggleFPS()
+            return true, fpsCounter and "FPS counter enabled" or "FPS counter disabled"
+        end
+    },
+    {
+        name = "√View",
+        aliases = "√view, √Spectate",
+        description = "Spectate a player",
+        requiresValue = true,
+        valueType = "player",
+        func = function(value)
+            local targetPlayer = findPlayer(value)
+            if targetPlayer then
+                startSpectating(targetPlayer)
+                return true, "Now spectating " .. targetPlayer.DisplayName
+            else
+                return false, "Player not found"
+            end
+        end
+    },
+    {
+        name = "√UnView",
+        aliases = "√unview, √UnSpectate",
+        description = "Stop spectating",
+        requiresValue = false,
+        func = function()
+            stopSpectating()
+            return true, "Stopped spectating"
         end
     },
     {
@@ -2385,6 +2426,104 @@ function disableLoopJumpPower()
     end
 end
 
+function toggleFPS()
+    if fpsCounter then
+        -- Disable FPS counter
+        if fpsConnection then
+            fpsConnection:Disconnect()
+            fpsConnection = nil
+        end
+        fpsCounter:Destroy()
+        fpsCounter = nil
+    else
+        -- Enable FPS counter
+        fpsCounter = Instance.new("TextLabel")
+        fpsCounter.Name = "FPSCounter"
+        fpsCounter.Size = UDim2.new(0, 100, 0, 40)
+        fpsCounter.Position = UDim2.new(1, -110, 0, 10)
+        fpsCounter.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+        fpsCounter.BackgroundTransparency = 0.3
+        fpsCounter.BorderSizePixel = 0
+        fpsCounter.Text = "FPS: 0"
+        fpsCounter.TextColor3 = Color3.fromRGB(0, 255, 100)
+        fpsCounter.TextSize = 18
+        fpsCounter.Font = Enum.Font.GothamBold
+        fpsCounter.Parent = ScreenGui
+        
+        local corner = Instance.new("UICorner")
+        corner.CornerRadius = UDim.new(0, 8)
+        corner.Parent = fpsCounter
+        
+        local stroke = Instance.new("UIStroke")
+        stroke.Color = Color3.fromRGB(0, 100, 255)
+        stroke.Thickness = 2
+        stroke.Parent = fpsCounter
+        
+        -- FPS calculation
+        local lastTime = tick()
+        local frameCount = 0
+        local fps = 0
+        
+        fpsConnection = RunService.RenderStepped:Connect(function()
+            frameCount = frameCount + 1
+            local currentTime = tick()
+            
+            if currentTime - lastTime >= 0.5 then
+                fps = math.floor(frameCount / (currentTime - lastTime))
+                fpsCounter.Text = "FPS: " .. fps
+                
+                -- Color based on FPS
+                if fps >= 60 then
+                    fpsCounter.TextColor3 = Color3.fromRGB(0, 255, 100)
+                elseif fps >= 30 then
+                    fpsCounter.TextColor3 = Color3.fromRGB(255, 255, 0)
+                else
+                    fpsCounter.TextColor3 = Color3.fromRGB(255, 50, 50)
+                end
+                
+                frameCount = 0
+                lastTime = currentTime
+            end
+        end)
+    end
+end
+
+function startSpectating(targetPlayer)
+    if spectating then
+        stopSpectating()
+    end
+    
+    spectating = true
+    spectateTarget = targetPlayer
+    
+    workspace.CurrentCamera.CameraSubject = targetPlayer.Character and targetPlayer.Character:FindFirstChild("Humanoid")
+    
+    -- Monitor for character changes
+    spectateConnection = targetPlayer.CharacterAdded:Connect(function(character)
+        if spectating then
+            task.wait(0.5)
+            workspace.CurrentCamera.CameraSubject = character:WaitForChild("Humanoid")
+        end
+    end)
+end
+
+function stopSpectating()
+    if not spectating then return end
+    
+    spectating = false
+    spectateTarget = nil
+    
+    if spectateConnection then
+        spectateConnection:Disconnect()
+        spectateConnection = nil
+    end
+    
+    -- Return camera to local player
+    if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
+        workspace.CurrentCamera.CameraSubject = LocalPlayer.Character.Humanoid
+    end
+end
+
 function createNotification(message, isSuccess)
     local NotifFrame = Instance.new("Frame")
     NotifFrame.Size = UDim2.new(0, 250, 0, 60)
@@ -2870,6 +3009,11 @@ LocalPlayer.CharacterAdded:Connect(function(character)
         CurrentEmoteTrack = nil
     end
     
+    -- Stop spectating on respawn
+    if spectating then
+        stopSpectating()
+    end
+    
     -- Teleport to spawn point if set
     if spawnPoint then
         task.wait(0.5)
@@ -3237,7 +3381,12 @@ local commandAliases = {
     ["√repeatjumppower"] = "√LoopJumpPower",
     ["√unloopjumppower"] = "√UnLoopJumpPower",
     ["√UnLoopJP"] = "√UnLoopJumpPower",
-    ["√unrepeatjumppower"] = "√UnLoopJumpPower"
+    ["√unrepeatjumppower"] = "√UnLoopJumpPower",
+    ["√fps"] = "√FPS",
+    ["√view"] = "√View",
+    ["√Spectate"] = "√View",
+    ["√unview"] = "√UnView",
+    ["√UnSpectate"] = "√UnView"
 }
 
 local function resolveAlias(commandName)
@@ -3428,6 +3577,10 @@ ScreenGui.AncestryChanged:Connect(function()
         disableWalkfling()
         disableLoopSpeed()
         disableLoopJumpPower()
+        stopSpectating()
+        if fpsCounter then
+            toggleFPS()
+        end
         if noclipConnection then
             noclipConnection:Disconnect()
         end
