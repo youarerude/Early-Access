@@ -2,13 +2,13 @@
 -- ▌▌▜   ▙▖▛▖▌▌ ▙▘▌▌▙▌▐ ▙▖▌▌  ▌▌▌▌▛▖▞▌▐ ▛▖▌
 -- ▚▘▟▖  ▙▖▌▝▌▙▖▌▌▐ ▌ ▐ ▙▖▙▘  ▛▌▙▘▌▝ ▌▟▖▌▝▌
 --                                        
--- Encryption Admin V1 in alpha + VehicleFly
+-- Encryption Admin V1 in alpha.
 
 print("▖▖▗   ▄▖▖ ▖▄▖▄▖▖▖▄▖▄▖▄▖▄   ▄▖▄ ▖  ▖▄▖▖ ▖")
 print("▌▌▜   ▙▖▛▖▌▌ ▙▘▌▌▙▌▐ ▙▖▌▌  ▌▌▌▌▛▖▞▌▐ ▛▖▌")
 print("▚▘▟▖  ▙▖▌▝▌▙▖▌▌▐ ▌ ▐ ▙▖▙▘  ▛▌▙▘▌▝ ▌▟▖▌▝▌")
 print("                                        ")
-print("Encryption Admin V1 in alpha + VehicleFly.")
+print("Encryption Admin V1 in alpha.")
 
 -- Services
 local Players = game:GetService("Players")
@@ -62,12 +62,12 @@ local spectating = false
 local spectateTarget = nil
 local spectateConnection = nil
 
--- VehicleFly Variables
+-- NEW VEHICLEFLY VARIABLES
 local vehicleFlyEnabled = false
 local vehicleFlySpeed = 50
 local vehicleFlyConnection = nil
-local vehicleVelocity = nil
-local vehicleGyro = nil
+local vVelocity = nil
+local vGyro = nil
 
 -- Create ScreenGui
 local ScreenGui = Instance.new("ScreenGui")
@@ -370,27 +370,6 @@ local Commands = {
         func = function()
             disableFly()
             return true, "Fly disabled"
-        end
-    },
-    {
-        name = "√VehicleFly",
-        aliases = "√vehiclefly, √VFly, √vfly",
-        description = "Fly while in any vehicle/seat (Pitch always ON)",
-        requiresValue = true,
-        valueType = "number",
-        func = function(value)
-            enableVehicleFly(value)
-            return true, "Vehicle Fly enabled (Speed: " .. vehicleFlySpeed .. ")"
-        end
-    },
-    {
-        name = "√UnVehicleFly",
-        aliases = "√unvehiclefly, √UnVFly, √unvfly",
-        description = "Disable vehicle fly",
-        requiresValue = false,
-        func = function()
-            disableVehicleFly()
-            return true, "Vehicle Fly disabled"
         end
     },
     {
@@ -861,6 +840,28 @@ local Commands = {
                 return false, "Failed to load Infinite Yield: " .. tostring(err)
             end
         end
+    },
+    -- NEW VEHICLEFLY COMMANDS
+    {
+        name = "√VehicleFly",
+        aliases = "√vehiclefly, √VFly, √vfly",
+        description = "Fly in any vehicle/seat - Pitch always ON",
+        requiresValue = true,
+        valueType = "number",
+        func = function(value)
+            local success, msg = enableVehicleFly(value)
+            return success, msg or "VehicleFly enabled"
+        end
+    },
+    {
+        name = "√UnVehicleFly",
+        aliases = "√unvehiclefly, √UnVFly, √unvfly",
+        description = "Disable vehicle fly",
+        requiresValue = false,
+        func = function()
+            disableVehicleFly()
+            return true, "VehicleFly disabled"
+        end
     }
 }
 
@@ -1101,62 +1102,63 @@ function disableFly()
     end
 end
 
--- NEW: VehicleFly Functions
+-- NEW VEHICLEFLY FUNCTIONS (Pitch ALWAYS ON)
 function enableVehicleFly(speed)
     if vehicleFlyEnabled then
         disableVehicleFly()
-        task.wait(0.1)
     end
     
-    vehicleFlySpeed = tonumber(speed) or 50
-    if vehicleFlySpeed < 10 then vehicleFlySpeed = 50 end
-    
     vehicleFlyEnabled = true
+    vehicleFlySpeed = tonumber(speed) or 50
+    if vehicleFlySpeed < 10 then vehicleFlySpeed = 10 end
     
-    local char = LocalPlayer.Character
-    if not char or not char:FindFirstChild("HumanoidRootPart") then return end
+    local character = LocalPlayer.Character
+    if not character or not character:FindFirstChild("HumanoidRootPart") then
+        vehicleFlyEnabled = false
+        return false, "No character found"
+    end
     
-    local hrp = char.HumanoidRootPart
+    local root = character.HumanoidRootPart
     
-    if vehicleVelocity then vehicleVelocity:Destroy() end
-    if vehicleGyro then vehicleGyro:Destroy() end
+    -- Cleanup old instances
+    if vVelocity then vVelocity:Destroy() end
+    if vGyro then vGyro:Destroy() end
     
-    vehicleVelocity = Instance.new("BodyVelocity")
-    vehicleVelocity.Name = "EncryptionVehicleBV"
-    vehicleVelocity.MaxForce = Vector3.new(9e9, 9e9, 9e9)
-    vehicleVelocity.Velocity = Vector3.new()
-    vehicleVelocity.Parent = hrp
+    vVelocity = Instance.new("BodyVelocity")
+    vVelocity.Name = "EncryptionVehicleFlyVel"
+    vVelocity.MaxForce = Vector3.new(9e9, 9e9, 9e9)
+    vVelocity.Velocity = Vector3.new(0, 0.1, 0)
+    vVelocity.Parent = root
     
-    vehicleGyro = Instance.new("BodyGyro")
-    vehicleGyro.Name = "EncryptionVehicleBG"
-    vehicleGyro.MaxTorque = Vector3.new(9e9, 9e9, 9e9)
-    vehicleGyro.P = 9000
-    vehicleGyro.D = 500
-    vehicleGyro.CFrame = hrp.CFrame
-    vehicleGyro.Parent = hrp
+    vGyro = Instance.new("BodyGyro")
+    vGyro.Name = "EncryptionVehicleFlyGyro"
+    vGyro.MaxTorque = Vector3.new(9e9, 9e9, 9e9)
+    vGyro.P = 1250
+    vGyro.D = 50
+    vGyro.CFrame = root.CFrame
+    vGyro.Parent = root
     
-    if vehicleFlyConnection then vehicleFlyConnection:Disconnect() end
+    -- Main loop - Pitch ALWAYS ON
     vehicleFlyConnection = RunService.RenderStepped:Connect(function()
-        if not vehicleFlyEnabled or not hrp.Parent then return end
-        
-        -- Pitch is ALWAYS full camera
-        vehicleGyro.CFrame = workspace.CurrentCamera.CFrame
-        
-        local f = flyControl.f
-        local b = flyControl.b
-        local l = flyControl.l
-        local r = flyControl.r
-        
-        local moveForward = f + b
-        local moveRight = r + l
+        if not vehicleFlyEnabled or not root.Parent then return end
         
         local cam = workspace.CurrentCamera
-        local velocity = (cam.CFrame.LookVector * moveForward + cam.CFrame.RightVector * moveRight) * vehicleFlySpeed
+        local move = Vector3.new()
         
-        if vehicleVelocity then
-            vehicleVelocity.Velocity = velocity
-        end
+        if UserInputService:IsKeyDown(Enum.KeyCode.W) then move += cam.CFrame.LookVector end
+        if UserInputService:IsKeyDown(Enum.KeyCode.S) then move -= cam.CFrame.LookVector end
+        if UserInputService:IsKeyDown(Enum.KeyCode.A) then move -= cam.CFrame.RightVector end
+        if UserInputService:IsKeyDown(Enum.KeyCode.D) then move += cam.CFrame.RightVector end
+        if UserInputService:IsKeyDown(Enum.KeyCode.Space) then move += Vector3.new(0,1,0) end
+        if UserInputService:IsKeyDown(Enum.KeyCode.LeftControl) then move -= Vector3.new(0,1,0) end
+        
+        local finalVel = move.Magnitude > 0 and move.Unit * vehicleFlySpeed * 7 or Vector3.new(0, 0.1, 0)
+        
+        vVelocity.Velocity = finalVel
+        vGyro.CFrame = cam.CFrame  -- Pitch always ON
     end)
+    
+    return true, "VehicleFly enabled (Speed: " .. vehicleFlySpeed .. ") - Pitch always ON"
 end
 
 function disableVehicleFly()
@@ -1167,20 +1169,19 @@ function disableVehicleFly()
         vehicleFlyConnection = nil
     end
     
-    if vehicleVelocity then
-        vehicleVelocity:Destroy()
-        vehicleVelocity = nil
+    if vVelocity then 
+        vVelocity:Destroy() 
+        vVelocity = nil 
     end
-    
-    if vehicleGyro then
-        vehicleGyro:Destroy()
-        vehicleGyro = nil
+    if vGyro then 
+        vGyro:Destroy() 
+        vGyro = nil 
     end
 end
 
--- Fly controls (WASD) - updated to support VehicleFly
+-- Fly controls (WASD)
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
-    if gameProcessed or (not flyEnabled and not vehicleFlyEnabled) then return end
+    if gameProcessed or not flyEnabled then return end
     
     if input.KeyCode == Enum.KeyCode.W then
         flyControl.f = 1
@@ -1194,7 +1195,7 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
 end)
 
 UserInputService.InputEnded:Connect(function(input)
-    if not flyEnabled and not vehicleFlyEnabled then return end
+    if not flyEnabled then return end
     
     if input.KeyCode == Enum.KeyCode.W then
         flyControl.f = 0
@@ -3316,10 +3317,10 @@ LocalPlayer.CharacterAdded:Connect(function(character)
         task.wait(0.5)
         enableFly(savedSpeed)
     end
-
+    
     -- Re-enable VehicleFly if it was enabled
     if vehicleFlyEnabled then
-        task.wait(0.5)
+        task.wait(0.6)
         enableVehicleFly(vehicleFlySpeed)
     end
     
@@ -3565,7 +3566,7 @@ spawn(function()
             elseif flyEnabled then
                 updateStatus("Status: Flying (Speed " .. flySpeed .. ")", Color3.fromRGB(0, 200, 255))
             elseif vehicleFlyEnabled then
-                updateStatus("Status: Vehicle Flying (Speed " .. vehicleFlySpeed .. ")", Color3.fromRGB(0, 200, 255))
+                updateStatus("Status: VehicleFly (Speed " .. vehicleFlySpeed .. ")", Color3.fromRGB(255, 165, 0))
             elseif noclipEnabled then
                 updateStatus("Status: Noclip Active", Color3.fromRGB(255, 200, 0))
             else
@@ -3784,7 +3785,7 @@ VersionLabel.Name = "VersionLabel"
 VersionLabel.Size = UDim2.new(0, 100, 0, 15)
 VersionLabel.Position = UDim2.new(1, -110, 1, -20)
 VersionLabel.BackgroundTransparency = 1
-VersionLabel.Text = "v1.0 Alpha + VehicleFly"
+VersionLabel.Text = "v1.0 Alpha - VehicleFly Added"
 VersionLabel.TextColor3 = Color3.fromRGB(100, 100, 100)
 VersionLabel.TextSize = 10
 VersionLabel.Font = Enum.Font.Gotham
@@ -3793,14 +3794,13 @@ VersionLabel.Parent = MainFrame
 
 -- Initialize with first notification
 task.wait(1)
-createNotification("Encryption Admin + VehicleFly loaded! Press [A] or swipe down to open.", true)
+createNotification("Encryption Admin loaded! Press [A] or swipe down to open.", true)
 
 -- Final initialization
 print("[Encryption Admin] Initialized successfully")
 print("[Encryption Admin] Commands loaded: " .. #Commands)
 print("[Encryption Admin] Ready for use")
 print("[Encryption Admin] Use " .. commandPrefix .. " prefix for commands")
-print("[Encryption Admin] VehicleFly added - √VehicleFly <speed> (Pitch always ON)")
 
 -- Heartbeat optimization for smooth animations
 RunService.Heartbeat:Connect(function()
