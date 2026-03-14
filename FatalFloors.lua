@@ -1,7 +1,7 @@
 -- =============================================
 --         Fatal Floors Script
 --         Made by Wrath
---         Version 1.6
+--         Version 1.7
 -- =============================================
 
 local Players = game:GetService("Players")
@@ -27,6 +27,9 @@ local autoSellThread = nil
 local autoGrabEnabled = false
 local autoGrabThread = nil
 local selectedGrabItems = {}
+
+local espEnabled = false
+local espThread = nil
 
 local grabItemsList = {
     "Campfire", "Carrot", "Cooked Carrot", "Cooked Ham",
@@ -515,6 +518,112 @@ local function autoGrabLoop(statusLabel)
 end
 
 -- =============================================
+-- ESP ENTITY
+-- =============================================
+
+local monsterConfig = {
+    FleshMonster  = { label = "Blob",         color = Color3.fromRGB(220, 30,  30)  },
+    RobotMonster  = { label = "Weatherman",   color = Color3.fromRGB(160, 160, 160) },
+    PlantMonster  = { label = "Thorns",       color = Color3.fromRGB(30,  90,  30)  },
+    CaveCrawler   = { label = "Cave-Crawler", color = Color3.fromRGB(120, 20,  20)  },
+    BirdMonster   = { label = "Giant Kiwi",   color = Color3.fromRGB(220, 120, 30)  },
+}
+
+local espObjects = {} -- stores { highlight, billboard } per model
+
+local function clearESP()
+    for _, objs in pairs(espObjects) do
+        if objs.highlight and objs.highlight.Parent then
+            objs.highlight:Destroy()
+        end
+        if objs.billboard and objs.billboard.Parent then
+            objs.billboard:Destroy()
+        end
+    end
+    espObjects = {}
+end
+
+local function applyESP(model, cfg)
+    if espObjects[model] then return end -- already applied
+
+    -- Highlight
+    local hl = Instance.new("SelectionBox")
+    hl.Color3 = cfg.color
+    hl.LineThickness = 0.06
+    hl.SurfaceTransparency = 0.6
+    hl.SurfaceColor3 = cfg.color
+    hl.Adornee = model
+    hl.Parent = workspace
+
+    -- Billboard (name + distance)
+    local root = model.PrimaryPart or model:FindFirstChildWhichIsA("BasePart")
+    local bb, lbl
+    if root then
+        bb = Instance.new("BillboardGui")
+        bb.Size = UDim2.new(0, 120, 0, 36)
+        bb.StudsOffset = Vector3.new(0, 3, 0)
+        bb.AlwaysOnTop = true
+        bb.Adornee = root
+        bb.Parent = workspace
+
+        lbl = Instance.new("TextLabel")
+        lbl.Size = UDim2.new(1, 0, 1, 0)
+        lbl.BackgroundTransparency = 1
+        lbl.TextColor3 = cfg.color
+        lbl.Font = Enum.Font.GothamBold
+        lbl.TextSize = 13
+        lbl.Text = cfg.label
+        lbl.TextStrokeTransparency = 0.4
+        lbl.Parent = bb
+    end
+
+    espObjects[model] = { highlight = hl, billboard = bb, label = lbl, root = root, cfg = cfg }
+end
+
+local function espLoop()
+    while espEnabled do
+        local monstersFolder = workspace:FindFirstChild("Monsters")
+            or workspace:FindFirstChild("Monsters", true)
+
+        local foundModels = {}
+
+        if monstersFolder then
+            for modelName, cfg in pairs(monsterConfig) do
+                for _, obj in ipairs(monstersFolder:GetChildren()) do
+                    if obj.Name == modelName and obj:IsA("Model") then
+                        foundModels[obj] = cfg
+                        applyESP(obj, cfg)
+                    end
+                end
+            end
+        end
+
+        -- Remove ESP from monsters that no longer exist
+        for model, objs in pairs(espObjects) do
+            if not model.Parent then
+                if objs.highlight then pcall(function() objs.highlight:Destroy() end) end
+                if objs.billboard then pcall(function() objs.billboard:Destroy() end) end
+                espObjects[model] = nil
+            end
+        end
+
+        -- Update distance labels
+        local hrp = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+        if hrp then
+            for model, objs in pairs(espObjects) do
+                if objs.root and objs.root.Parent and objs.label then
+                    local dist = math.floor((objs.root.Position - hrp.Position).Magnitude)
+                    objs.label.Text = objs.cfg.label .. "\n" .. dist .. " studs"
+                end
+            end
+        end
+
+        task.wait(0.2)
+    end
+    clearESP()
+end
+
+-- =============================================
 -- GUI
 -- =============================================
 
@@ -613,7 +722,7 @@ content.BackgroundTransparency = 1
 content.BorderSizePixel = 0
 content.ScrollBarThickness = 3
 content.ScrollBarImageColor3 = Color3.fromRGB(180, 40, 40)
-content.CanvasSize = UDim2.new(0, 0, 0, 620) -- total inner height
+content.CanvasSize = UDim2.new(0, 0, 0, 560)
 content.ScrollingDirection = Enum.ScrollingDirection.Y
 content.ElasticBehavior = Enum.ElasticBehavior.Never
 content.Parent = mainFrame
@@ -729,7 +838,7 @@ sellBtnStroke.Parent = sellBtn
 -- Hint label for combined mode
 local hintLabel = Instance.new("TextLabel")
 hintLabel.Text = "💡 Enable with Autocollect Ore for full auto loop"
-hintLabel.Size = UDim2.new(1, 0, 0, 28)
+hintLabel.Size = UDim2.new(1, 0, 0, 24)
 hintLabel.Position = UDim2.new(0, 0, 0, 238)
 hintLabel.BackgroundTransparency = 1
 hintLabel.TextColor3 = Color3.fromRGB(90, 90, 110)
@@ -739,56 +848,11 @@ hintLabel.TextXAlignment = Enum.TextXAlignment.Left
 hintLabel.TextWrapped = true
 hintLabel.Parent = content
 
-local div4 = Instance.new("Frame")
-div4.Size = UDim2.new(1, 0, 0, 1)
-div4.Position = UDim2.new(0, 0, 0, 270)
-div4.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
-div4.BorderSizePixel = 0
-div4.Parent = content
-
-local oreListLabel = Instance.new("TextLabel")
-oreListLabel.Text = "Ore Targets: Iron · Jade · Amber · Amethyst · Gold"
-oreListLabel.Size = UDim2.new(1, 0, 0, 18)
-oreListLabel.Position = UDim2.new(0, 0, 0, 278)
-oreListLabel.BackgroundTransparency = 1
-oreListLabel.TextColor3 = Color3.fromRGB(90, 90, 110)
-oreListLabel.Font = Enum.Font.Gotham
-oreListLabel.TextSize = 10
-oreListLabel.TextXAlignment = Enum.TextXAlignment.Left
-oreListLabel.TextWrapped = true
-oreListLabel.Parent = content
-
--- ---- AUTO-GRAB CATEGORY ----
-local div5 = Instance.new("Frame")
-div5.Size = UDim2.new(1, 0, 0, 1)
-div5.Position = UDim2.new(0, 0, 0, 305)
-div5.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
-div5.BorderSizePixel = 0
-div5.Parent = content
-
-local catLabel3 = Instance.new("TextLabel")
-catLabel3.Text = "🎒  AUTOMATIC"
-catLabel3.Size = UDim2.new(1, 0, 0, 20)
-catLabel3.Position = UDim2.new(0, 0, 0, 313)
-catLabel3.BackgroundTransparency = 1
-catLabel3.TextColor3 = Color3.fromRGB(160, 160, 160)
-catLabel3.Font = Enum.Font.GothamBold
-catLabel3.TextSize = 11
-catLabel3.TextXAlignment = Enum.TextXAlignment.Left
-catLabel3.Parent = content
-
-local div6 = Instance.new("Frame")
-div6.Size = UDim2.new(1, 0, 0, 1)
-div6.Position = UDim2.new(0, 0, 0, 337)
-div6.BackgroundColor3 = Color3.fromRGB(180, 40, 40)
-div6.BorderSizePixel = 0
-div6.Parent = content
-
--- Auto-Grab Button
+-- Auto-Grab Button (same category as Auto Sell)
 local grabBtn = Instance.new("TextButton")
 grabBtn.Text = "Auto-Grab Items   [ OFF ]"
 grabBtn.Size = UDim2.new(1, 0, 0, 40)
-grabBtn.Position = UDim2.new(0, 0, 0, 345)
+grabBtn.Position = UDim2.new(0, 0, 0, 268)
 grabBtn.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
 grabBtn.TextColor3 = Color3.fromRGB(200, 200, 210)
 grabBtn.Font = Enum.Font.Gotham
@@ -805,7 +869,7 @@ grabBtnStroke.Parent = grabBtn
 local dropdownBtn = Instance.new("TextButton")
 dropdownBtn.Text = "Select Items to Grab  ▼"
 dropdownBtn.Size = UDim2.new(1, 0, 0, 34)
-dropdownBtn.Position = UDim2.new(0, 0, 0, 393)
+dropdownBtn.Position = UDim2.new(0, 0, 0, 316)
 dropdownBtn.BackgroundColor3 = Color3.fromRGB(20, 20, 30)
 dropdownBtn.TextColor3 = Color3.fromRGB(160, 160, 180)
 dropdownBtn.Font = Enum.Font.Gotham
@@ -822,7 +886,7 @@ dropdownBtnStroke.Parent = dropdownBtn
 local dropdownList = Instance.new("Frame")
 dropdownList.Name = "DropdownList"
 dropdownList.Size = UDim2.new(1, 0, 0, 0)
-dropdownList.Position = UDim2.new(0, 0, 0, 431)
+dropdownList.Position = UDim2.new(0, 0, 0, 354)
 dropdownList.BackgroundColor3 = Color3.fromRGB(18, 18, 26)
 dropdownList.BorderSizePixel = 0
 dropdownList.ClipsDescendants = true
@@ -882,11 +946,83 @@ for i, itemName in ipairs(grabItemsList) do
     end)
 end
 
--- Watermark
+-- ---- MANUAL CATEGORY ----
+local divManual = Instance.new("Frame")
+divManual.Size = UDim2.new(1, 0, 0, 1)
+divManual.Position = UDim2.new(0, 0, 0, 362)
+divManual.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
+divManual.BorderSizePixel = 0
+divManual.Parent = content
+
+local catManual = Instance.new("TextLabel")
+catManual.Text = "👁  MANUAL"
+catManual.Size = UDim2.new(1, 0, 0, 20)
+catManual.Position = UDim2.new(0, 0, 0, 370)
+catManual.BackgroundTransparency = 1
+catManual.TextColor3 = Color3.fromRGB(160, 160, 160)
+catManual.Font = Enum.Font.GothamBold
+catManual.TextSize = 11
+catManual.TextXAlignment = Enum.TextXAlignment.Left
+catManual.Parent = content
+
+local divManual2 = Instance.new("Frame")
+divManual2.Size = UDim2.new(1, 0, 0, 1)
+divManual2.Position = UDim2.new(0, 0, 0, 394)
+divManual2.BackgroundColor3 = Color3.fromRGB(180, 40, 40)
+divManual2.BorderSizePixel = 0
+divManual2.Parent = content
+
+-- ESP Entity Button
+local espBtn = Instance.new("TextButton")
+espBtn.Text = "ESP Entity   [ OFF ]"
+espBtn.Size = UDim2.new(1, 0, 0, 40)
+espBtn.Position = UDim2.new(0, 0, 0, 402)
+espBtn.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
+espBtn.TextColor3 = Color3.fromRGB(200, 200, 210)
+espBtn.Font = Enum.Font.Gotham
+espBtn.TextSize = 13
+espBtn.BorderSizePixel = 0
+espBtn.Parent = content
+Instance.new("UICorner", espBtn).CornerRadius = UDim.new(0, 8)
+local espBtnStroke = Instance.new("UIStroke")
+espBtnStroke.Color = Color3.fromRGB(70, 70, 90)
+espBtnStroke.Thickness = 1
+espBtnStroke.Parent = espBtn
+
+-- Monster legend label
+local espLegend = Instance.new("TextLabel")
+espLegend.Text = "🔴 Blob  ⬜ Weatherman  🟢 Thorns  🟤 Cave-Crawler  🟠 Kiwi"
+espLegend.Size = UDim2.new(1, 0, 0, 28)
+espLegend.Position = UDim2.new(0, 0, 0, 448)
+espLegend.BackgroundTransparency = 1
+espLegend.TextColor3 = Color3.fromRGB(90, 90, 110)
+espLegend.Font = Enum.Font.Gotham
+espLegend.TextSize = 9
+espLegend.TextXAlignment = Enum.TextXAlignment.Left
+espLegend.TextWrapped = true
+espLegend.Parent = content
+
+-- Return Button
+local returnBtn = Instance.new("TextButton")
+returnBtn.Text = "Return to Map"
+returnBtn.Size = UDim2.new(1, 0, 0, 40)
+returnBtn.Position = UDim2.new(0, 0, 0, 482)
+returnBtn.BackgroundColor3 = Color3.fromRGB(35, 20, 20)
+returnBtn.TextColor3 = Color3.fromRGB(220, 100, 100)
+returnBtn.Font = Enum.Font.GothamBold
+returnBtn.TextSize = 13
+returnBtn.BorderSizePixel = 0
+returnBtn.Parent = content
+Instance.new("UICorner", returnBtn).CornerRadius = UDim.new(0, 8)
+local returnBtnStroke = Instance.new("UIStroke")
+returnBtnStroke.Color = Color3.fromRGB(180, 40, 40)
+returnBtnStroke.Thickness = 1
+returnBtnStroke.Parent = returnBtn
+
 local watermark = Instance.new("TextLabel")
-watermark.Text = "Fatal Floors Script v1.6  •  by Wrath"
+watermark.Text = "Fatal Floors Script v1.7  •  by Wrath"
 watermark.Size = UDim2.new(1, 0, 0, 16)
-watermark.Position = UDim2.new(0, 0, 1, -16)
+watermark.Position = UDim2.new(0, 0, 0, 532)
 watermark.BackgroundTransparency = 1
 watermark.TextColor3 = Color3.fromRGB(65, 65, 80)
 watermark.Font = Enum.Font.Gotham
@@ -1038,10 +1174,13 @@ closeBtn.MouseButton1Click:Connect(function()
     autocollectShardEnabled = false
     autoSellEnabled = false
     autoGrabEnabled = false
+    espEnabled = false
     if autocollectOreThread then task.cancel(autocollectOreThread) end
     if autocollectShardThread then task.cancel(autocollectShardThread) end
     if autoSellThread then task.cancel(autoSellThread) end
     if autoGrabThread then task.cancel(autoGrabThread) end
+    if espThread then task.cancel(espThread) end
+    clearESP()
 
     -- Fade + shrink out
     local close = TweenService:Create(mainFrame, tweenInfo, {
@@ -1142,7 +1281,7 @@ dropdownBtn.MouseButton1Click:Connect(function()
         }):Play()
         -- Expand scroll canvas to fit dropdown
         TweenService:Create(content, dropTweenInfo, {
-            CanvasSize = UDim2.new(0, 0, 0, 620 + DROPDOWN_FULL_H)
+            CanvasSize = UDim2.new(0, 0, 0, 560 + DROPDOWN_FULL_H)
         }):Play()
     else
         dropdownBtn.Text = "Select Items to Grab  ▼"
@@ -1150,8 +1289,36 @@ dropdownBtn.MouseButton1Click:Connect(function()
             Size = UDim2.new(1, 0, 0, 0)
         }):Play()
         TweenService:Create(content, dropTweenInfo, {
-            CanvasSize = UDim2.new(0, 0, 0, 620)
+            CanvasSize = UDim2.new(0, 0, 0, 560)
         }):Play()
+    end
+end)
+
+-- ESP Entity toggle
+espBtn.MouseButton1Click:Connect(function()
+    espEnabled = not espEnabled
+    if espEnabled then
+        espBtn.Text = "ESP Entity   [ ON ]"
+        espBtn.BackgroundColor3 = Color3.fromRGB(50, 15, 15)
+        espBtnStroke.Color = Color3.fromRGB(220, 60, 60)
+        espThread = task.spawn(espLoop)
+    else
+        espBtn.Text = "ESP Entity   [ OFF ]"
+        espBtn.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
+        espBtnStroke.Color = Color3.fromRGB(70, 70, 90)
+        if espThread then task.cancel(espThread) espThread = nil end
+        clearESP()
+    end
+end)
+
+-- Return to Map button
+returnBtn.MouseButton1Click:Connect(function()
+    local mapPart = findMapPart()
+    if mapPart then
+        safeTeleport(mapPart)
+        updateStatus(statusLabel, "Returned to Map.", Color3.fromRGB(110, 110, 110))
+    else
+        updateStatus(statusLabel, "Map not found!", Color3.fromRGB(200, 80, 80))
     end
 end)
 
@@ -1160,5 +1327,5 @@ player.CharacterAdded:Connect(function(char)
 end)
 
 -- =============================================
-print("[Fatal Floors Script v1.6] Loaded! Made by Wrath.")
+print("[Fatal Floors Script v1.7] Loaded! Made by Wrath.")
 -- =============================================
