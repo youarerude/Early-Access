@@ -1,11 +1,12 @@
 -- =============================================
 --         Fatal Floors Script
 --         Made by Wrath
---         Version 1.3
+--         Version 1.4
 -- =============================================
 
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
 
 local player = Players.LocalPlayer
 local character = player.Character or player.CharacterAdded:Wait()
@@ -56,16 +57,23 @@ end
 
 local function getOresInInventory()
     local ores = {}
+    local oreSet = {}
+    for _, name in ipairs(oreNames) do oreSet[name] = true end
+
     local backpack = player:FindFirstChild("Backpack")
     if backpack then
         for _, item in ipairs(backpack:GetChildren()) do
-            if item:IsA("Tool") then table.insert(ores, item) end
+            if item:IsA("Tool") and oreSet[item.Name] then
+                table.insert(ores, item)
+            end
         end
     end
     local char = player.Character
     if char then
         for _, item in ipairs(char:GetChildren()) do
-            if item:IsA("Tool") then table.insert(ores, item) end
+            if item:IsA("Tool") and oreSet[item.Name] then
+                table.insert(ores, item)
+            end
         end
     end
     return ores
@@ -497,7 +505,7 @@ minimizeBtn.Parent = titleBar
 Instance.new("UICorner", minimizeBtn).CornerRadius = UDim.new(0, 5)
 
 local closeBtn = Instance.new("TextButton")
-closeBtn.Text = "✕"
+closeBtn.Text = "X"
 closeBtn.Size = UDim2.new(0, 28, 0, 22)
 closeBtn.Position = UDim2.new(1, -30, 0.5, -11)
 closeBtn.BackgroundColor3 = Color3.fromRGB(180, 35, 35)
@@ -517,7 +525,7 @@ content.Parent = mainFrame
 
 -- ---- AUTOCOLLECTS CATEGORY ----
 local catLabel1 = Instance.new("TextLabel")
-catLabel1.Text = "🪨  AUTOCOLLECTS"
+catLabel1.Text = "⛏  AUTOCOLLECTS"
 catLabel1.Size = UDim2.new(1, 0, 0, 20)
 catLabel1.Position = UDim2.new(0, 0, 0, 0)
 catLabel1.BackgroundTransparency = 1
@@ -657,7 +665,7 @@ oreListLabel.Parent = content
 
 -- Watermark
 local watermark = Instance.new("TextLabel")
-watermark.Text = "Fatal Floors Script v1.3  •  by Wrath"
+watermark.Text = "Fatal Floors Script v1.4  •  by Wrath"
 watermark.Size = UDim2.new(1, 0, 0, 16)
 watermark.Position = UDim2.new(0, 0, 1, -16)
 watermark.BackgroundTransparency = 1
@@ -729,27 +737,99 @@ makeDraggable(circleBtn, circleBtn)
 -- BUTTON EVENTS
 -- =============================================
 
+local tweenInfo = TweenInfo.new(0.25, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+local isAnimating = false
+
 minimizeBtn.MouseButton1Click:Connect(function()
+    if isAnimating then return end
+    isAnimating = true
+
     local absPos = mainFrame.AbsolutePosition
-    circleBtn.Position = UDim2.new(0, absPos.X + 10, 0, absPos.Y + 10)
+    local targetX = absPos.X + mainFrame.AbsoluteSize.X / 2 - 27
+    local targetY = absPos.Y + mainFrame.AbsoluteSize.Y / 2 - 27
+
+    -- Shrink mainFrame to a circle
+    local shrink = TweenService:Create(mainFrame, tweenInfo, {
+        Size = UDim2.new(0, 54, 0, 54),
+        Position = UDim2.new(0, targetX, 0, targetY),
+        BackgroundTransparency = 1
+    })
+    mainStroke.Enabled = false
+    shrink:Play()
+    shrink.Completed:Wait()
+
     mainFrame.Visible = false
+    mainFrame.Size = UDim2.new(0, 300, 0, 420)
+    mainFrame.BackgroundTransparency = 0
+    mainStroke.Enabled = true
+
+    circleBtn.Position = UDim2.new(0, targetX, 0, targetY)
     circleBtn.Visible = true
+    circleBtn.Size = UDim2.new(0, 0, 0, 0)
+    circleBtn.BackgroundTransparency = 1
+
+    local grow = TweenService:Create(circleBtn, tweenInfo, {
+        Size = UDim2.new(0, 54, 0, 54),
+        BackgroundTransparency = 0
+    })
+    grow:Play()
+    grow.Completed:Wait()
+    isAnimating = false
 end)
 
 circleBtn.MouseButton1Click:Connect(function()
+    if isAnimating then return end
+    isAnimating = true
+
     local absPos = circleBtn.AbsolutePosition
-    mainFrame.Position = UDim2.new(0, absPos.X - 10, 0, absPos.Y - 10)
+
+    -- Shrink circle away
+    local shrink = TweenService:Create(circleBtn, tweenInfo, {
+        Size = UDim2.new(0, 0, 0, 0),
+        BackgroundTransparency = 1
+    })
+    shrink:Play()
+    shrink.Completed:Wait()
     circleBtn.Visible = false
+    circleBtn.Size = UDim2.new(0, 54, 0, 54)
+    circleBtn.BackgroundTransparency = 0
+
+    -- Restore mainFrame from same position, expanding out
+    mainFrame.Position = UDim2.new(0, absPos.X - 123, 0, absPos.Y - 183)
+    mainFrame.Size = UDim2.new(0, 54, 0, 54)
+    mainFrame.BackgroundTransparency = 1
+    mainStroke.Enabled = false
     mainFrame.Visible = true
+
+    local expand = TweenService:Create(mainFrame, tweenInfo, {
+        Size = UDim2.new(0, 300, 0, 420),
+        BackgroundTransparency = 0
+    })
+    mainStroke.Enabled = true
+    expand:Play()
+    expand.Completed:Wait()
+    isAnimating = false
 end)
 
 closeBtn.MouseButton1Click:Connect(function()
+    if isAnimating then return end
+    isAnimating = true
+
     autocollectOreEnabled = false
     autocollectShardEnabled = false
     autoSellEnabled = false
     if autocollectOreThread then task.cancel(autocollectOreThread) end
     if autocollectShardThread then task.cancel(autocollectShardThread) end
     if autoSellThread then task.cancel(autoSellThread) end
+
+    -- Fade + shrink out
+    local close = TweenService:Create(mainFrame, tweenInfo, {
+        Size = UDim2.new(0, 0, 0, 0),
+        BackgroundTransparency = 1
+    })
+    mainStroke.Enabled = false
+    close:Play()
+    close.Completed:Wait()
     screenGui:Destroy()
 end)
 
@@ -815,5 +895,5 @@ player.CharacterAdded:Connect(function(char)
 end)
 
 -- =============================================
-print("[Fatal Floors Script v1.3] Loaded! Made by Wrath.")
+print("[Fatal Floors Script v1.4] Loaded! Made by Wrath.")
 -- =============================================
