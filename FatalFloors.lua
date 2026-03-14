@@ -213,6 +213,17 @@ end
 -- SELL SEQUENCE (shared by both loops)
 -- =============================================
 
+local function equipTool(tool)
+    local char = player.Character
+    if not char then return end
+    local humanoid = char:FindFirstChildWhichIsA("Humanoid")
+    if humanoid and tool and tool.Parent then
+        pcall(function()
+            humanoid:EquipTool(tool)
+        end)
+    end
+end
+
 local function sellAllOres(statusLabel)
     local spot = findSellingSpot()
     if not spot then
@@ -224,18 +235,24 @@ local function sellAllOres(statusLabel)
     if #ores == 0 then return end
 
     safeTeleport(spot)
-    task.wait(0.2)
+    task.wait(0.3)
 
     for _, ore in ipairs(ores) do
         if not ore or not ore.Parent then continue end
 
         updateStatus(statusLabel, "Selling " .. ore.Name .. "...", Color3.fromRGB(255, 200, 50))
+
+        -- Equip (hold) the ore first
+        equipTool(ore)
+        task.wait(0.2)
+
         safeTeleport(spot)
         task.wait(0.1)
 
-        -- Spam prox prompts until ore leaves inventory
+        -- Spam prox prompts while holding the ore until it disappears
         local attempts = 0
         while ore and ore.Parent and attempts < 60 do
+            equipTool(ore)
             safeTeleport(spot)
             task.wait(0.05)
             fireNearbyProximityPrompts(spot.Position, 15)
@@ -243,7 +260,7 @@ local function sellAllOres(statusLabel)
             task.wait(0.08)
         end
 
-        task.wait(0.1)
+        task.wait(0.15)
     end
 end
 
