@@ -1,7 +1,7 @@
 -- =============================================
 --         Fatal Floors Script
 --         Made by Wrath
---         Version 1.5
+--         Version 1.6
 -- =============================================
 
 local Players = game:GetService("Players")
@@ -531,8 +531,8 @@ screenGui.Parent = player:WaitForChild("PlayerGui")
 -- Main Frame
 local mainFrame = Instance.new("Frame")
 mainFrame.Name = "MainFrame"
-mainFrame.Size = UDim2.new(0, 300, 0, 500)
-mainFrame.Position = UDim2.new(0.5, -150, 0.5, -250)
+mainFrame.Size = UDim2.new(0, 300, 0, 340)
+mainFrame.Position = UDim2.new(0.5, -150, 0.5, -170)
 mainFrame.BackgroundColor3 = Color3.fromRGB(12, 12, 18)
 mainFrame.BorderSizePixel = 0
 mainFrame.Active = true
@@ -605,11 +605,17 @@ closeBtn.BorderSizePixel = 0
 closeBtn.Parent = titleBar
 Instance.new("UICorner", closeBtn).CornerRadius = UDim.new(0, 5)
 
--- Content
-local content = Instance.new("Frame")
-content.Size = UDim2.new(1, -20, 1, -48)
-content.Position = UDim2.new(0, 10, 0, 44)
+-- Scrollable Content
+local content = Instance.new("ScrollingFrame")
+content.Size = UDim2.new(1, -8, 1, -48)
+content.Position = UDim2.new(0, 4, 0, 44)
 content.BackgroundTransparency = 1
+content.BorderSizePixel = 0
+content.ScrollBarThickness = 3
+content.ScrollBarImageColor3 = Color3.fromRGB(180, 40, 40)
+content.CanvasSize = UDim2.new(0, 0, 0, 620) -- total inner height
+content.ScrollingDirection = Enum.ScrollingDirection.Y
+content.ElasticBehavior = Enum.ElasticBehavior.Never
 content.Parent = mainFrame
 
 -- ---- AUTOCOLLECTS CATEGORY ----
@@ -878,7 +884,7 @@ end
 
 -- Watermark
 local watermark = Instance.new("TextLabel")
-watermark.Text = "Fatal Floors Script v1.5  •  by Wrath"
+watermark.Text = "Fatal Floors Script v1.6  •  by Wrath"
 watermark.Size = UDim2.new(1, 0, 0, 16)
 watermark.Position = UDim2.new(0, 0, 1, -16)
 watermark.BackgroundTransparency = 1
@@ -972,7 +978,7 @@ minimizeBtn.MouseButton1Click:Connect(function()
     shrink.Completed:Wait()
 
     mainFrame.Visible = false
-    mainFrame.Size = UDim2.new(0, 300, 0, 420)
+    mainFrame.Size = UDim2.new(0, 300, 0, 340)
     mainFrame.BackgroundTransparency = 0
     mainStroke.Enabled = true
 
@@ -1008,14 +1014,14 @@ circleBtn.MouseButton1Click:Connect(function()
     circleBtn.BackgroundTransparency = 0
 
     -- Restore mainFrame from same position, expanding out
-    mainFrame.Position = UDim2.new(0, absPos.X - 123, 0, absPos.Y - 183)
+    mainFrame.Position = UDim2.new(0, absPos.X - 123, 0, absPos.Y - 143)
     mainFrame.Size = UDim2.new(0, 54, 0, 54)
     mainFrame.BackgroundTransparency = 1
     mainStroke.Enabled = false
     mainFrame.Visible = true
 
     local expand = TweenService:Create(mainFrame, tweenInfo, {
-        Size = UDim2.new(0, 300, 0, 420),
+        Size = UDim2.new(0, 300, 0, 340),
         BackgroundTransparency = 0
     })
     mainStroke.Enabled = true
@@ -1131,21 +1137,20 @@ dropdownBtn.MouseButton1Click:Connect(function()
     dropdownOpen = not dropdownOpen
     if dropdownOpen then
         dropdownBtn.Text = "Select Items to Grab  ▲"
-        -- Expand mainFrame and dropdown
         TweenService:Create(dropdownList, dropTweenInfo, {
             Size = UDim2.new(1, 0, 0, DROPDOWN_FULL_H)
         }):Play()
-        TweenService:Create(mainFrame, dropTweenInfo, {
-            Size = UDim2.new(0, 300, 0, 500 + DROPDOWN_FULL_H)
+        -- Expand scroll canvas to fit dropdown
+        TweenService:Create(content, dropTweenInfo, {
+            CanvasSize = UDim2.new(0, 0, 0, 620 + DROPDOWN_FULL_H)
         }):Play()
     else
         dropdownBtn.Text = "Select Items to Grab  ▼"
-        -- Collapse dropdown and shrink mainFrame
         TweenService:Create(dropdownList, dropTweenInfo, {
             Size = UDim2.new(1, 0, 0, 0)
         }):Play()
-        TweenService:Create(mainFrame, dropTweenInfo, {
-            Size = UDim2.new(0, 300, 0, 500)
+        TweenService:Create(content, dropTweenInfo, {
+            CanvasSize = UDim2.new(0, 0, 0, 620)
         }):Play()
     end
 end)
@@ -1155,5 +1160,5 @@ player.CharacterAdded:Connect(function(char)
 end)
 
 -- =============================================
-print("[Fatal Floors Script v1.5] Loaded! Made by Wrath.")
+print("[Fatal Floors Script v1.6] Loaded! Made by Wrath.")
 -- =============================================
