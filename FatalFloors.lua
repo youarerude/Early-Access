@@ -641,7 +641,7 @@ screenGui.Parent = player:WaitForChild("PlayerGui")
 local mainFrame = Instance.new("Frame")
 mainFrame.Name = "MainFrame"
 mainFrame.Size = UDim2.new(0, 300, 0, 340)
-mainFrame.Position = UDim2.new(0.5, -150, 0.5, -170)
+mainFrame.Position = UDim2.new(0, 10, 0, 60)
 mainFrame.BackgroundColor3 = Color3.fromRGB(12, 12, 18)
 mainFrame.BorderSizePixel = 0
 mainFrame.Active = true
@@ -1077,15 +1077,19 @@ local function makeDraggable(frame, handle)
     UserInputService.InputChanged:Connect(function(input)
         if input == dragInput and dragging then
             local delta = input.Position - mousePos
-            frame.Position = UDim2.new(
-                framePos.X.Scale, framePos.X.Offset + delta.X,
-                framePos.Y.Scale, framePos.Y.Offset + delta.Y
-            )
+            local vp = workspace.CurrentCamera.ViewportSize
+            local newX = framePos.X.Offset + delta.X
+            local newY = framePos.Y.Offset + delta.Y
+            -- Clamp so frame always stays on screen
+            newX = math.clamp(newX, 0, vp.X - frame.AbsoluteSize.X)
+            newY = math.clamp(newY, 0, vp.Y - frame.AbsoluteSize.Y)
+            frame.Position = UDim2.new(0, newX, 0, newY)
         end
     end)
 end
 
-makeDraggable(mainFrame, titleBar)
+-- Make ENTIRE mainFrame draggable, not just title bar
+makeDraggable(mainFrame, mainFrame)
 makeDraggable(circleBtn, circleBtn)
 
 -- =============================================
