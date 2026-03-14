@@ -1,7 +1,7 @@
 -- =============================================
 --         Fatal Floors Script
 --         Made by Wrath
---         Version 1.4
+--         Version 1.5
 -- =============================================
 
 local Players = game:GetService("Players")
@@ -23,6 +23,16 @@ local autocollectShardThread = nil
 
 local autoSellEnabled = false
 local autoSellThread = nil
+
+local autoGrabEnabled = false
+local autoGrabThread = nil
+local selectedGrabItems = {}
+
+local grabItemsList = {
+    "Campfire", "Carrot", "Cooked Carrot", "Cooked Ham",
+    "Ham", "Flashlight", "Hammer", "Planter",
+    "Reviver", "Storage", "Teleporter"
+}
 
 local oreNames = {"Iron Ore", "Jade Ore", "Amber Ore", "Amethyst Ore", "Gold Ore"}
 
@@ -426,6 +436,85 @@ local function autoSellLoop(statusLabel)
 end
 
 -- =============================================
+-- AUTO GRAB ITEM FINDER
+-- Searches ALL of ProcGenGenerated regardless of parent
+-- =============================================
+
+local function findItemInProcGen(itemName)
+    local generated = workspace:FindFirstChild("ProcGenGenerated")
+        or workspace:FindFirstChild("ProcGenGenerated", true)
+    if not generated then return nil end
+
+    for _, obj in ipairs(generated:GetDescendants()) do
+        if obj.Name == itemName then
+            if obj:IsA("BasePart") then return obj end
+            if obj:IsA("Model") then
+                if obj.PrimaryPart then return obj.PrimaryPart end
+                local part = obj:FindFirstChildWhichIsA("BasePart", true)
+                if part then return part end
+            end
+            if obj:IsA("UnionOperation") then return obj end
+        end
+    end
+    return nil
+end
+
+-- =============================================
+-- AUTO GRAB LOOP
+-- =============================================
+
+local function autoGrabLoop(statusLabel)
+    while autoGrabEnabled do
+        if next(selectedGrabItems) == nil then
+            updateStatus(statusLabel, "No items selected!", Color3.fromRGB(200, 80, 80))
+            task.wait(1)
+            continue
+        end
+
+        local foundAny = false
+
+        for itemName, _ in pairs(selectedGrabItems) do
+            if not autoGrabEnabled then break end
+
+            local itemPart = findItemInProcGen(itemName)
+
+            if not itemPart then
+                sendChat(itemName .. " not found.")
+                task.wait(0.5)
+                continue
+            end
+
+            foundAny = true
+            updateStatus(statusLabel, "Grabbing " .. itemName .. "...", Color3.fromRGB(160, 100, 220))
+            safeTeleport(itemPart)
+            task.wait(0.2)
+
+            local attempts = 0
+            while autoGrabEnabled and attempts < 50 do
+                local current = findItemInProcGen(itemName)
+                if not current then break end
+                safeTeleport(current)
+                task.wait(0.05)
+                fireNearbyProximityPrompts(current.Position, 15)
+                attempts += 1
+                task.wait(0.08)
+            end
+
+            task.wait(0.05)
+        end
+
+        if foundAny then
+            updateStatus(statusLabel, "Done! Returning to Map...", Color3.fromRGB(160, 100, 220))
+            local mapPart = findMapPart()
+            if mapPart then safeTeleport(mapPart) end
+            task.wait(2)
+        else
+            task.wait(1)
+        end
+    end
+end
+
+-- =============================================
 -- GUI
 -- =============================================
 
@@ -442,8 +531,8 @@ screenGui.Parent = player:WaitForChild("PlayerGui")
 -- Main Frame
 local mainFrame = Instance.new("Frame")
 mainFrame.Name = "MainFrame"
-mainFrame.Size = UDim2.new(0, 300, 0, 420)
-mainFrame.Position = UDim2.new(0.5, -150, 0.5, -210)
+mainFrame.Size = UDim2.new(0, 300, 0, 500)
+mainFrame.Position = UDim2.new(0.5, -150, 0.5, -250)
 mainFrame.BackgroundColor3 = Color3.fromRGB(12, 12, 18)
 mainFrame.BorderSizePixel = 0
 mainFrame.Active = true
@@ -663,9 +752,133 @@ oreListLabel.TextXAlignment = Enum.TextXAlignment.Left
 oreListLabel.TextWrapped = true
 oreListLabel.Parent = content
 
+-- ---- AUTO-GRAB CATEGORY ----
+local div5 = Instance.new("Frame")
+div5.Size = UDim2.new(1, 0, 0, 1)
+div5.Position = UDim2.new(0, 0, 0, 305)
+div5.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
+div5.BorderSizePixel = 0
+div5.Parent = content
+
+local catLabel3 = Instance.new("TextLabel")
+catLabel3.Text = "🎒  AUTOMATIC"
+catLabel3.Size = UDim2.new(1, 0, 0, 20)
+catLabel3.Position = UDim2.new(0, 0, 0, 313)
+catLabel3.BackgroundTransparency = 1
+catLabel3.TextColor3 = Color3.fromRGB(160, 160, 160)
+catLabel3.Font = Enum.Font.GothamBold
+catLabel3.TextSize = 11
+catLabel3.TextXAlignment = Enum.TextXAlignment.Left
+catLabel3.Parent = content
+
+local div6 = Instance.new("Frame")
+div6.Size = UDim2.new(1, 0, 0, 1)
+div6.Position = UDim2.new(0, 0, 0, 337)
+div6.BackgroundColor3 = Color3.fromRGB(180, 40, 40)
+div6.BorderSizePixel = 0
+div6.Parent = content
+
+-- Auto-Grab Button
+local grabBtn = Instance.new("TextButton")
+grabBtn.Text = "Auto-Grab Items   [ OFF ]"
+grabBtn.Size = UDim2.new(1, 0, 0, 40)
+grabBtn.Position = UDim2.new(0, 0, 0, 345)
+grabBtn.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
+grabBtn.TextColor3 = Color3.fromRGB(200, 200, 210)
+grabBtn.Font = Enum.Font.Gotham
+grabBtn.TextSize = 13
+grabBtn.BorderSizePixel = 0
+grabBtn.Parent = content
+Instance.new("UICorner", grabBtn).CornerRadius = UDim.new(0, 8)
+local grabBtnStroke = Instance.new("UIStroke")
+grabBtnStroke.Color = Color3.fromRGB(70, 70, 90)
+grabBtnStroke.Thickness = 1
+grabBtnStroke.Parent = grabBtn
+
+-- Dropdown Header Button
+local dropdownBtn = Instance.new("TextButton")
+dropdownBtn.Text = "Select Items to Grab  ▼"
+dropdownBtn.Size = UDim2.new(1, 0, 0, 34)
+dropdownBtn.Position = UDim2.new(0, 0, 0, 393)
+dropdownBtn.BackgroundColor3 = Color3.fromRGB(20, 20, 30)
+dropdownBtn.TextColor3 = Color3.fromRGB(160, 160, 180)
+dropdownBtn.Font = Enum.Font.Gotham
+dropdownBtn.TextSize = 12
+dropdownBtn.BorderSizePixel = 0
+dropdownBtn.Parent = content
+Instance.new("UICorner", dropdownBtn).CornerRadius = UDim.new(0, 8)
+local dropdownBtnStroke = Instance.new("UIStroke")
+dropdownBtnStroke.Color = Color3.fromRGB(60, 60, 80)
+dropdownBtnStroke.Thickness = 1
+dropdownBtnStroke.Parent = dropdownBtn
+
+-- Dropdown List Container (ClipsDescendants for animation)
+local dropdownList = Instance.new("Frame")
+dropdownList.Name = "DropdownList"
+dropdownList.Size = UDim2.new(1, 0, 0, 0)
+dropdownList.Position = UDim2.new(0, 0, 0, 431)
+dropdownList.BackgroundColor3 = Color3.fromRGB(18, 18, 26)
+dropdownList.BorderSizePixel = 0
+dropdownList.ClipsDescendants = true
+dropdownList.Parent = content
+Instance.new("UICorner", dropdownList).CornerRadius = UDim.new(0, 8)
+local dropdownStroke = Instance.new("UIStroke")
+dropdownStroke.Color = Color3.fromRGB(60, 60, 80)
+dropdownStroke.Thickness = 1
+dropdownStroke.Parent = dropdownList
+
+-- Populate dropdown items
+local ITEM_H = 30
+local dropdownOpen = false
+local DROPDOWN_FULL_H = #grabItemsList * ITEM_H
+
+local itemButtons = {}
+for i, itemName in ipairs(grabItemsList) do
+    local itemBtn = Instance.new("TextButton")
+    itemBtn.Text = "  " .. itemName
+    itemBtn.Size = UDim2.new(1, 0, 0, ITEM_H)
+    itemBtn.Position = UDim2.new(0, 0, 0, (i - 1) * ITEM_H)
+    itemBtn.BackgroundColor3 = Color3.fromRGB(18, 18, 26)
+    itemBtn.TextColor3 = Color3.fromRGB(160, 160, 180)
+    itemBtn.Font = Enum.Font.Gotham
+    itemBtn.TextSize = 12
+    itemBtn.TextXAlignment = Enum.TextXAlignment.Left
+    itemBtn.BorderSizePixel = 0
+    itemBtn.Parent = dropdownList
+
+    local itemStroke = Instance.new("UIStroke")
+    itemStroke.Color = Color3.fromRGB(35, 35, 50)
+    itemStroke.Thickness = 0.5
+    itemStroke.Parent = itemBtn
+
+    -- Divider line between items
+    if i < #grabItemsList then
+        local line = Instance.new("Frame")
+        line.Size = UDim2.new(1, -10, 0, 1)
+        line.Position = UDim2.new(0, 5, 1, -1)
+        line.BackgroundColor3 = Color3.fromRGB(35, 35, 50)
+        line.BorderSizePixel = 0
+        line.Parent = itemBtn
+    end
+
+    itemButtons[itemName] = itemBtn
+
+    itemBtn.MouseButton1Click:Connect(function()
+        if selectedGrabItems[itemName] then
+            selectedGrabItems[itemName] = nil
+            itemBtn.BackgroundColor3 = Color3.fromRGB(18, 18, 26)
+            itemBtn.TextColor3 = Color3.fromRGB(160, 160, 180)
+        else
+            selectedGrabItems[itemName] = true
+            itemBtn.BackgroundColor3 = Color3.fromRGB(30, 20, 60)
+            itemBtn.TextColor3 = Color3.fromRGB(180, 120, 255)
+        end
+    end)
+end
+
 -- Watermark
 local watermark = Instance.new("TextLabel")
-watermark.Text = "Fatal Floors Script v1.4  •  by Wrath"
+watermark.Text = "Fatal Floors Script v1.5  •  by Wrath"
 watermark.Size = UDim2.new(1, 0, 0, 16)
 watermark.Position = UDim2.new(0, 0, 1, -16)
 watermark.BackgroundTransparency = 1
@@ -818,9 +1031,11 @@ closeBtn.MouseButton1Click:Connect(function()
     autocollectOreEnabled = false
     autocollectShardEnabled = false
     autoSellEnabled = false
+    autoGrabEnabled = false
     if autocollectOreThread then task.cancel(autocollectOreThread) end
     if autocollectShardThread then task.cancel(autocollectShardThread) end
     if autoSellThread then task.cancel(autoSellThread) end
+    if autoGrabThread then task.cancel(autoGrabThread) end
 
     -- Fade + shrink out
     local close = TweenService:Create(mainFrame, tweenInfo, {
@@ -890,10 +1105,55 @@ sellBtn.MouseButton1Click:Connect(function()
     end
 end)
 
+-- Auto-Grab toggle
+grabBtn.MouseButton1Click:Connect(function()
+    autoGrabEnabled = not autoGrabEnabled
+    if autoGrabEnabled then
+        grabBtn.Text = "Auto-Grab Items   [ ON ]"
+        grabBtn.BackgroundColor3 = Color3.fromRGB(40, 20, 70)
+        grabBtnStroke.Color = Color3.fromRGB(160, 80, 255)
+        updateStatus(statusLabel, "Auto-Grab active...", Color3.fromRGB(160, 100, 220))
+        autoGrabThread = task.spawn(function()
+            autoGrabLoop(statusLabel)
+        end)
+    else
+        grabBtn.Text = "Auto-Grab Items   [ OFF ]"
+        grabBtn.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
+        grabBtnStroke.Color = Color3.fromRGB(70, 70, 90)
+        updateStatus(statusLabel, "Idle", Color3.fromRGB(110, 110, 110))
+        if autoGrabThread then task.cancel(autoGrabThread) autoGrabThread = nil end
+    end
+end)
+
+-- Dropdown open/close animation
+local dropTweenInfo = TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+dropdownBtn.MouseButton1Click:Connect(function()
+    dropdownOpen = not dropdownOpen
+    if dropdownOpen then
+        dropdownBtn.Text = "Select Items to Grab  ▲"
+        -- Expand mainFrame and dropdown
+        TweenService:Create(dropdownList, dropTweenInfo, {
+            Size = UDim2.new(1, 0, 0, DROPDOWN_FULL_H)
+        }):Play()
+        TweenService:Create(mainFrame, dropTweenInfo, {
+            Size = UDim2.new(0, 300, 0, 500 + DROPDOWN_FULL_H)
+        }):Play()
+    else
+        dropdownBtn.Text = "Select Items to Grab  ▼"
+        -- Collapse dropdown and shrink mainFrame
+        TweenService:Create(dropdownList, dropTweenInfo, {
+            Size = UDim2.new(1, 0, 0, 0)
+        }):Play()
+        TweenService:Create(mainFrame, dropTweenInfo, {
+            Size = UDim2.new(0, 300, 0, 500)
+        }):Play()
+    end
+end)
+
 player.CharacterAdded:Connect(function(char)
     character = char
 end)
 
 -- =============================================
-print("[Fatal Floors Script v1.4] Loaded! Made by Wrath.")
+print("[Fatal Floors Script v1.5] Loaded! Made by Wrath.")
 -- =============================================
