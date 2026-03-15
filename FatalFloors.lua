@@ -1,7 +1,7 @@
 -- =============================================
 --         Fatal Floors Script
 --         Made by Wrath
---         Version 1.7
+--         Version 1
 -- =============================================
 
 local Players = game:GetService("Players")
@@ -30,6 +30,11 @@ local selectedGrabItems = {}
 
 local espEnabled = false
 local espThread = nil
+
+local autoCookEnabled = false
+local autoCookThread = nil
+
+local maxBagSize = 2 -- adjustable via text input
 
 local grabItemsList = {
     "Campfire", "Carrot", "Cooked Carrot", "Cooked Ham",
@@ -65,7 +70,7 @@ local function isInventoryFull()
             if item:IsA("Tool") then toolCount += 1 end
         end
     end
-    return toolCount >= 2
+    return toolCount >= maxBagSize
 end
 
 local function getOresInInventory()
@@ -376,7 +381,7 @@ local function autocollectShardLoop(statusLabel)
         local shards = findShards()
 
         if #shards == 0 then
-            updateStatus(statusLabel, "No shards! Returning to Map...", Color3.fromRGB(180, 180, 60))
+            sendChat("Theres no Shards.")
             local mapPart = findMapPart()
             if mapPart then safeTeleport(mapPart) end
             task.wait(2)
@@ -624,6 +629,154 @@ local function espLoop()
 end
 
 -- =============================================
+-- AUTO COOK
+-- =============================================
+
+local rawFoods = {"Carrot", "Ham", "Giant Egg"}
+local cookedMap = {
+    ["Carrot"]    = "Cooked Carrot",
+    ["Ham"]       = "Cooked Ham",
+    ["Giant Egg"] = "Cooked Giant Egg",
+}
+local ignoredItems = {
+    ["Reviver"] = true,
+    ["Flashlight"] = true, ["Hammer"] = true, ["Planter"] = true,
+    ["Storage"] = true, ["Teleporter"] = true, ["Campfire"] = true,
+}
+for _, n in ipairs(oreNames) do ignoredItems[n] = true end
+
+local function findCampfire()
+    -- Search entire workspace regardless of parent
+    for _, obj in ipairs(workspace:GetDescendants()) do
+        if obj.Name == "Campfire" and obj:IsA("Model") then
+            if obj.PrimaryPart then return obj.PrimaryPart end
+            local part = obj:FindFirstChildWhichIsA("BasePart", true)
+            if part then return part end
+        end
+    end
+    return nil
+end
+
+local function getAllToolsInInventory()
+    local tools = {}
+    local backpack = player:FindFirstChild("Backpack")
+    if backpack then
+        for _, item in ipairs(backpack:GetChildren()) do
+            if item:IsA("Tool") then table.insert(tools, item) end
+        end
+    end
+    local char = player.Character
+    if char then
+        for _, item in ipairs(char:GetChildren()) do
+            if item:IsA("Tool") then table.insert(tools, item) end
+        end
+    end
+    return tools
+end
+
+local function getRawFoodsInInventory()
+    local foods = {}
+    local backpack = player:FindFirstChild("Backpack")
+    if backpack then
+        for _, item in ipairs(backpack:GetChildren()) do
+            if item:IsA("Tool") and cookedMap[item.Name] then
+                table.insert(foods, item)
+            end
+        end
+    end
+    local char = player.Character
+    if char then
+        for _, item in ipairs(char:GetChildren()) do
+            if item:IsA("Tool") and cookedMap[item.Name] then
+                table.insert(foods, item)
+            end
+        end
+    end
+    return foods
+end
+
+local function allFoodCooked()
+    -- Returns true if no raw food items remain (ignoring ignored items)
+    local tools = getAllToolsInInventory()
+    for _, tool in ipairs(tools) do
+        if cookedMap[tool.Name] then
+            return false -- still has raw food
+        end
+    end
+    return true
+end
+
+local function autoCookLoop(statusLabel)
+    while autoCookEnabled do
+
+        local campfire = findCampfire()
+        if not campfire then
+            sendChat("Place the Campfire first.")
+            updateStatus(statusLabel, "No Campfire found!", Color3.fromRGB(220, 80, 80))
+            task.wait(3)
+            continue
+        end
+
+        local rawFoods = getRawFoodsInInventory()
+
+        if #rawFoods == 0 then
+            -- Nothing left to cook — go to map
+            updateStatus(statusLabel, "All cooked! Returning to Map...", Color3.fromRGB(100, 220, 120))
+            local mapPart = findMapPart()
+            if mapPart then safeTeleport(mapPart) end
+            task.wait(2)
+            -- Wait until raw food available again
+            while autoCookEnabled and #getRawFoodsInInventory() == 0 do
+                task.wait(1)
+            end
+            continue
+        end
+
+        -- Pick a random raw food from inventory
+        local food = rawFoods[math.random(#rawFoods)]
+        if not food or not food.Parent then continue end
+
+        local expectedCooked = cookedMap[food.Name]
+        updateStatus(statusLabel, "Cooking " .. food.Name .. "...", Color3.fromRGB(255, 160, 40))
+
+        -- Equip the food and teleport to campfire
+        equipTool(food)
+        task.wait(0.2)
+        safeTeleport(campfire)
+        task.wait(0.2)
+
+        -- Spam proximity prompt until food becomes cooked (name changes) or disappears
+        local attempts = 0
+        while autoCookEnabled and attempts < 80 do
+            -- Check if cooked version now in inventory
+            local tools = getAllToolsInInventory()
+            local foundCooked = false
+            local stillRaw = false
+            for _, t in ipairs(tools) do
+                if t.Name == expectedCooked then foundCooked = true end
+                if t == food and t.Parent then stillRaw = true end
+            end
+
+            if foundCooked or not stillRaw then
+                -- Successfully cooked!
+                updateStatus(statusLabel, food.Name .. " → " .. expectedCooked, Color3.fromRGB(100, 220, 120))
+                break
+            end
+
+            -- Re-equip and spam
+            if food and food.Parent then equipTool(food) end
+            safeTeleport(campfire)
+            task.wait(0.05)
+            fireNearbyProximityPrompts(campfire.Position, 15)
+            attempts += 1
+            task.wait(0.08)
+        end
+
+        task.wait(0.1)
+    end
+end
+
+-- =============================================
 -- GUI
 -- =============================================
 
@@ -722,12 +875,12 @@ content.BackgroundTransparency = 1
 content.BorderSizePixel = 0
 content.ScrollBarThickness = 3
 content.ScrollBarImageColor3 = Color3.fromRGB(180, 40, 40)
-content.CanvasSize = UDim2.new(0, 0, 0, 560)
+content.CanvasSize = UDim2.new(0, 0, 0, 540)
 content.ScrollingDirection = Enum.ScrollingDirection.Y
 content.ElasticBehavior = Enum.ElasticBehavior.Never
 content.Parent = mainFrame
 
--- ---- AUTOCOLLECTS CATEGORY ----
+-- ---- AUTOCOLLECTS ----
 local catLabel1 = Instance.new("TextLabel")
 catLabel1.Text = "⛏  AUTOCOLLECTS"
 catLabel1.Size = UDim2.new(1, 0, 0, 20)
@@ -746,7 +899,6 @@ div1.BackgroundColor3 = Color3.fromRGB(180, 40, 40)
 div1.BorderSizePixel = 0
 div1.Parent = content
 
--- Autocollect Ore Button
 local oreBtn = Instance.new("TextButton")
 oreBtn.Text = "Autocollect Ore   [ OFF ]"
 oreBtn.Size = UDim2.new(1, 0, 0, 40)
@@ -763,7 +915,6 @@ oreBtnStroke.Color = Color3.fromRGB(70, 70, 90)
 oreBtnStroke.Thickness = 1
 oreBtnStroke.Parent = oreBtn
 
--- Autocollect Shard Button
 local shardBtn = Instance.new("TextButton")
 shardBtn.Text = "Autocollect Shard  [ OFF ]"
 shardBtn.Size = UDim2.new(1, 0, 0, 40)
@@ -780,30 +931,18 @@ shardBtnStroke.Color = Color3.fromRGB(70, 70, 90)
 shardBtnStroke.Thickness = 1
 shardBtnStroke.Parent = shardBtn
 
--- Status Label (shared)
-local statusLabel = Instance.new("TextLabel")
-statusLabel.Text = "Status: Idle"
-statusLabel.Size = UDim2.new(1, 0, 0, 18)
-statusLabel.Position = UDim2.new(0, 0, 0, 126)
-statusLabel.BackgroundTransparency = 1
-statusLabel.TextColor3 = Color3.fromRGB(110, 110, 110)
-statusLabel.Font = Enum.Font.Gotham
-statusLabel.TextSize = 11
-statusLabel.TextXAlignment = Enum.TextXAlignment.Left
-statusLabel.Parent = content
-
 local div2 = Instance.new("Frame")
 div2.Size = UDim2.new(1, 0, 0, 1)
-div2.Position = UDim2.new(0, 0, 0, 152)
+div2.Position = UDim2.new(0, 0, 0, 124)
 div2.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
 div2.BorderSizePixel = 0
 div2.Parent = content
 
--- ---- AUTOMATIC CATEGORY ----
+-- ---- AUTOMATIC ----
 local catLabel2 = Instance.new("TextLabel")
 catLabel2.Text = "⚙  AUTOMATIC"
 catLabel2.Size = UDim2.new(1, 0, 0, 20)
-catLabel2.Position = UDim2.new(0, 0, 0, 160)
+catLabel2.Position = UDim2.new(0, 0, 0, 132)
 catLabel2.BackgroundTransparency = 1
 catLabel2.TextColor3 = Color3.fromRGB(160, 160, 160)
 catLabel2.Font = Enum.Font.GothamBold
@@ -813,16 +952,15 @@ catLabel2.Parent = content
 
 local div3 = Instance.new("Frame")
 div3.Size = UDim2.new(1, 0, 0, 1)
-div3.Position = UDim2.new(0, 0, 0, 184)
+div3.Position = UDim2.new(0, 0, 0, 156)
 div3.BackgroundColor3 = Color3.fromRGB(180, 40, 40)
 div3.BorderSizePixel = 0
 div3.Parent = content
 
--- Auto Sell Button
 local sellBtn = Instance.new("TextButton")
 sellBtn.Text = "Auto Sell   [ OFF ]"
 sellBtn.Size = UDim2.new(1, 0, 0, 40)
-sellBtn.Position = UDim2.new(0, 0, 0, 192)
+sellBtn.Position = UDim2.new(0, 0, 0, 164)
 sellBtn.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
 sellBtn.TextColor3 = Color3.fromRGB(200, 200, 210)
 sellBtn.Font = Enum.Font.Gotham
@@ -835,24 +973,10 @@ sellBtnStroke.Color = Color3.fromRGB(70, 70, 90)
 sellBtnStroke.Thickness = 1
 sellBtnStroke.Parent = sellBtn
 
--- Hint label for combined mode
-local hintLabel = Instance.new("TextLabel")
-hintLabel.Text = "💡 Enable with Autocollect Ore for full auto loop"
-hintLabel.Size = UDim2.new(1, 0, 0, 24)
-hintLabel.Position = UDim2.new(0, 0, 0, 238)
-hintLabel.BackgroundTransparency = 1
-hintLabel.TextColor3 = Color3.fromRGB(90, 90, 110)
-hintLabel.Font = Enum.Font.Gotham
-hintLabel.TextSize = 10
-hintLabel.TextXAlignment = Enum.TextXAlignment.Left
-hintLabel.TextWrapped = true
-hintLabel.Parent = content
-
--- Auto-Grab Button (same category as Auto Sell)
 local grabBtn = Instance.new("TextButton")
 grabBtn.Text = "Auto-Grab Items   [ OFF ]"
 grabBtn.Size = UDim2.new(1, 0, 0, 40)
-grabBtn.Position = UDim2.new(0, 0, 0, 268)
+grabBtn.Position = UDim2.new(0, 0, 0, 210)
 grabBtn.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
 grabBtn.TextColor3 = Color3.fromRGB(200, 200, 210)
 grabBtn.Font = Enum.Font.Gotham
@@ -865,11 +989,10 @@ grabBtnStroke.Color = Color3.fromRGB(70, 70, 90)
 grabBtnStroke.Thickness = 1
 grabBtnStroke.Parent = grabBtn
 
--- Dropdown Header Button
 local dropdownBtn = Instance.new("TextButton")
 dropdownBtn.Text = "Select Items to Grab  ▼"
 dropdownBtn.Size = UDim2.new(1, 0, 0, 34)
-dropdownBtn.Position = UDim2.new(0, 0, 0, 316)
+dropdownBtn.Position = UDim2.new(0, 0, 0, 256)
 dropdownBtn.BackgroundColor3 = Color3.fromRGB(20, 20, 30)
 dropdownBtn.TextColor3 = Color3.fromRGB(160, 160, 180)
 dropdownBtn.Font = Enum.Font.Gotham
@@ -882,14 +1005,15 @@ dropdownBtnStroke.Color = Color3.fromRGB(60, 60, 80)
 dropdownBtnStroke.Thickness = 1
 dropdownBtnStroke.Parent = dropdownBtn
 
--- Dropdown List Container (ClipsDescendants for animation)
+-- Dropdown List — high ZIndex so it renders on top of buttons below
 local dropdownList = Instance.new("Frame")
 dropdownList.Name = "DropdownList"
 dropdownList.Size = UDim2.new(1, 0, 0, 0)
-dropdownList.Position = UDim2.new(0, 0, 0, 354)
+dropdownList.Position = UDim2.new(0, 0, 0, 294)
 dropdownList.BackgroundColor3 = Color3.fromRGB(18, 18, 26)
 dropdownList.BorderSizePixel = 0
 dropdownList.ClipsDescendants = true
+dropdownList.ZIndex = 8
 dropdownList.Parent = content
 Instance.new("UICorner", dropdownList).CornerRadius = UDim.new(0, 8)
 local dropdownStroke = Instance.new("UIStroke")
@@ -897,7 +1021,6 @@ dropdownStroke.Color = Color3.fromRGB(60, 60, 80)
 dropdownStroke.Thickness = 1
 dropdownStroke.Parent = dropdownList
 
--- Populate dropdown items
 local ITEM_H = 30
 local dropdownOpen = false
 local DROPDOWN_FULL_H = #grabItemsList * ITEM_H
@@ -914,25 +1037,22 @@ for i, itemName in ipairs(grabItemsList) do
     itemBtn.TextSize = 12
     itemBtn.TextXAlignment = Enum.TextXAlignment.Left
     itemBtn.BorderSizePixel = 0
+    itemBtn.ZIndex = 8
     itemBtn.Parent = dropdownList
-
     local itemStroke = Instance.new("UIStroke")
     itemStroke.Color = Color3.fromRGB(35, 35, 50)
     itemStroke.Thickness = 0.5
     itemStroke.Parent = itemBtn
-
-    -- Divider line between items
     if i < #grabItemsList then
         local line = Instance.new("Frame")
         line.Size = UDim2.new(1, -10, 0, 1)
         line.Position = UDim2.new(0, 5, 1, -1)
         line.BackgroundColor3 = Color3.fromRGB(35, 35, 50)
         line.BorderSizePixel = 0
+        line.ZIndex = 8
         line.Parent = itemBtn
     end
-
     itemButtons[itemName] = itemBtn
-
     itemBtn.MouseButton1Click:Connect(function()
         if selectedGrabItems[itemName] then
             selectedGrabItems[itemName] = nil
@@ -946,10 +1066,37 @@ for i, itemName in ipairs(grabItemsList) do
     end)
 end
 
--- ---- MANUAL CATEGORY ----
+-- BASE Y positions for all elements that push down when dropdown opens
+local BASE_COOK     = 300
+local BASE_DIVM     = 346
+local BASE_CATM     = 354
+local BASE_DIVM2    = 378
+local BASE_ESP      = 386
+local BASE_BAGLBL   = 432
+local BASE_BAGINPUT = 428
+local BASE_RETURN   = 468
+local BASE_WM       = 516
+
+local cookBtn = Instance.new("TextButton")
+cookBtn.Text = "Auto-Cook   [ OFF ]"
+cookBtn.Size = UDim2.new(1, 0, 0, 40)
+cookBtn.Position = UDim2.new(0, 0, 0, BASE_COOK)
+cookBtn.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
+cookBtn.TextColor3 = Color3.fromRGB(200, 200, 210)
+cookBtn.Font = Enum.Font.Gotham
+cookBtn.TextSize = 13
+cookBtn.BorderSizePixel = 0
+cookBtn.Parent = content
+Instance.new("UICorner", cookBtn).CornerRadius = UDim.new(0, 8)
+local cookBtnStroke = Instance.new("UIStroke")
+cookBtnStroke.Color = Color3.fromRGB(70, 70, 90)
+cookBtnStroke.Thickness = 1
+cookBtnStroke.Parent = cookBtn
+
+-- ---- MANUAL ----
 local divManual = Instance.new("Frame")
 divManual.Size = UDim2.new(1, 0, 0, 1)
-divManual.Position = UDim2.new(0, 0, 0, 362)
+divManual.Position = UDim2.new(0, 0, 0, BASE_DIVM)
 divManual.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
 divManual.BorderSizePixel = 0
 divManual.Parent = content
@@ -957,7 +1104,7 @@ divManual.Parent = content
 local catManual = Instance.new("TextLabel")
 catManual.Text = "👁  MANUAL"
 catManual.Size = UDim2.new(1, 0, 0, 20)
-catManual.Position = UDim2.new(0, 0, 0, 370)
+catManual.Position = UDim2.new(0, 0, 0, BASE_CATM)
 catManual.BackgroundTransparency = 1
 catManual.TextColor3 = Color3.fromRGB(160, 160, 160)
 catManual.Font = Enum.Font.GothamBold
@@ -967,16 +1114,15 @@ catManual.Parent = content
 
 local divManual2 = Instance.new("Frame")
 divManual2.Size = UDim2.new(1, 0, 0, 1)
-divManual2.Position = UDim2.new(0, 0, 0, 394)
+divManual2.Position = UDim2.new(0, 0, 0, BASE_DIVM2)
 divManual2.BackgroundColor3 = Color3.fromRGB(180, 40, 40)
 divManual2.BorderSizePixel = 0
 divManual2.Parent = content
 
--- ESP Entity Button
 local espBtn = Instance.new("TextButton")
 espBtn.Text = "ESP Entity   [ OFF ]"
 espBtn.Size = UDim2.new(1, 0, 0, 40)
-espBtn.Position = UDim2.new(0, 0, 0, 402)
+espBtn.Position = UDim2.new(0, 0, 0, BASE_ESP)
 espBtn.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
 espBtn.TextColor3 = Color3.fromRGB(200, 200, 210)
 espBtn.Font = Enum.Font.Gotham
@@ -989,24 +1135,39 @@ espBtnStroke.Color = Color3.fromRGB(70, 70, 90)
 espBtnStroke.Thickness = 1
 espBtnStroke.Parent = espBtn
 
--- Monster legend label
-local espLegend = Instance.new("TextLabel")
-espLegend.Text = "🔴 Blob  ⬜ Weatherman  🟢 Thorns  🟤 Cave-Crawler  🟠 Kiwi"
-espLegend.Size = UDim2.new(1, 0, 0, 28)
-espLegend.Position = UDim2.new(0, 0, 0, 448)
-espLegend.BackgroundTransparency = 1
-espLegend.TextColor3 = Color3.fromRGB(90, 90, 110)
-espLegend.Font = Enum.Font.Gotham
-espLegend.TextSize = 9
-espLegend.TextXAlignment = Enum.TextXAlignment.Left
-espLegend.TextWrapped = true
-espLegend.Parent = content
+local maxBagLabel = Instance.new("TextLabel")
+maxBagLabel.Text = "Max Bag Detection"
+maxBagLabel.Size = UDim2.new(0.6, 0, 0, 20)
+maxBagLabel.Position = UDim2.new(0, 0, 0, BASE_BAGLBL)
+maxBagLabel.BackgroundTransparency = 1
+maxBagLabel.TextColor3 = Color3.fromRGB(160, 160, 160)
+maxBagLabel.Font = Enum.Font.Gotham
+maxBagLabel.TextSize = 11
+maxBagLabel.TextXAlignment = Enum.TextXAlignment.Left
+maxBagLabel.Parent = content
 
--- Return Button
+local maxBagInput = Instance.new("TextBox")
+maxBagInput.Text = "2"
+maxBagInput.Size = UDim2.new(0.35, 0, 0, 30)
+maxBagInput.Position = UDim2.new(0.65, 0, 0, BASE_BAGINPUT)
+maxBagInput.BackgroundColor3 = Color3.fromRGB(20, 20, 30)
+maxBagInput.TextColor3 = Color3.fromRGB(220, 220, 220)
+maxBagInput.Font = Enum.Font.GothamBold
+maxBagInput.TextSize = 13
+maxBagInput.TextXAlignment = Enum.TextXAlignment.Center
+maxBagInput.ClearTextOnFocus = false
+maxBagInput.BorderSizePixel = 0
+maxBagInput.Parent = content
+Instance.new("UICorner", maxBagInput).CornerRadius = UDim.new(0, 6)
+local maxBagInputStroke = Instance.new("UIStroke")
+maxBagInputStroke.Color = Color3.fromRGB(80, 80, 100)
+maxBagInputStroke.Thickness = 1
+maxBagInputStroke.Parent = maxBagInput
+
 local returnBtn = Instance.new("TextButton")
 returnBtn.Text = "Return to Map"
 returnBtn.Size = UDim2.new(1, 0, 0, 40)
-returnBtn.Position = UDim2.new(0, 0, 0, 482)
+returnBtn.Position = UDim2.new(0, 0, 0, BASE_RETURN)
 returnBtn.BackgroundColor3 = Color3.fromRGB(35, 20, 20)
 returnBtn.TextColor3 = Color3.fromRGB(220, 100, 100)
 returnBtn.Font = Enum.Font.GothamBold
@@ -1020,15 +1181,31 @@ returnBtnStroke.Thickness = 1
 returnBtnStroke.Parent = returnBtn
 
 local watermark = Instance.new("TextLabel")
-watermark.Text = "Fatal Floors Script v1.7  •  by Wrath"
+watermark.Text = "Fatal Floors Script v1  •  by Wrath"
 watermark.Size = UDim2.new(1, 0, 0, 16)
-watermark.Position = UDim2.new(0, 0, 0, 532)
+watermark.Position = UDim2.new(0, 0, 0, BASE_WM)
 watermark.BackgroundTransparency = 1
 watermark.TextColor3 = Color3.fromRGB(65, 65, 80)
 watermark.Font = Enum.Font.Gotham
 watermark.TextSize = 10
 watermark.TextXAlignment = Enum.TextXAlignment.Center
 watermark.Parent = content
+
+-- Table of elements that push down when dropdown opens
+local pushElements = {
+    { obj = cookBtn,    base = BASE_COOK     },
+    { obj = divManual,  base = BASE_DIVM     },
+    { obj = catManual,  base = BASE_CATM     },
+    { obj = divManual2, base = BASE_DIVM2    },
+    { obj = espBtn,     base = BASE_ESP      },
+    { obj = maxBagLabel,base = BASE_BAGLBL   },
+    { obj = maxBagInput,base = BASE_BAGINPUT },
+    { obj = returnBtn,  base = BASE_RETURN   },
+    { obj = watermark,  base = BASE_WM       },
+}
+
+-- nil statusLabel — removed from GUI, functions handle nil safely
+local statusLabel = nil
 
 -- Minimized Circle
 local circleBtn = Instance.new("TextButton")
@@ -1178,11 +1355,13 @@ closeBtn.MouseButton1Click:Connect(function()
     autocollectShardEnabled = false
     autoSellEnabled = false
     autoGrabEnabled = false
+    autoCookEnabled = false
     espEnabled = false
     if autocollectOreThread then task.cancel(autocollectOreThread) end
     if autocollectShardThread then task.cancel(autocollectShardThread) end
     if autoSellThread then task.cancel(autoSellThread) end
     if autoGrabThread then task.cancel(autoGrabThread) end
+    if autoCookThread then task.cancel(autoCookThread) end
     if espThread then task.cancel(espThread) end
     clearESP()
 
@@ -1283,18 +1462,74 @@ dropdownBtn.MouseButton1Click:Connect(function()
         TweenService:Create(dropdownList, dropTweenInfo, {
             Size = UDim2.new(1, 0, 0, DROPDOWN_FULL_H)
         }):Play()
-        -- Expand scroll canvas to fit dropdown
+        -- Push all elements below the dropdown down
+        for _, entry in ipairs(pushElements) do
+            TweenService:Create(entry.obj, dropTweenInfo, {
+                Position = UDim2.new(
+                    entry.obj.Position.X.Scale, entry.obj.Position.X.Offset,
+                    0, entry.base + DROPDOWN_FULL_H
+                )
+            }):Play()
+        end
         TweenService:Create(content, dropTweenInfo, {
-            CanvasSize = UDim2.new(0, 0, 0, 560 + DROPDOWN_FULL_H)
+            CanvasSize = UDim2.new(0, 0, 0, 540 + DROPDOWN_FULL_H)
         }):Play()
     else
         dropdownBtn.Text = "Select Items to Grab  ▼"
         TweenService:Create(dropdownList, dropTweenInfo, {
             Size = UDim2.new(1, 0, 0, 0)
         }):Play()
+        -- Push elements back up to base positions
+        for _, entry in ipairs(pushElements) do
+            TweenService:Create(entry.obj, dropTweenInfo, {
+                Position = UDim2.new(
+                    entry.obj.Position.X.Scale, entry.obj.Position.X.Offset,
+                    0, entry.base
+                )
+            }):Play()
+        end
         TweenService:Create(content, dropTweenInfo, {
-            CanvasSize = UDim2.new(0, 0, 0, 560)
+            CanvasSize = UDim2.new(0, 0, 0, 540)
         }):Play()
+    end
+end)
+
+-- Auto-Cook toggle
+cookBtn.MouseButton1Click:Connect(function()
+    autoCookEnabled = not autoCookEnabled
+    if autoCookEnabled then
+        cookBtn.Text = "Auto-Cook   [ ON ]"
+        cookBtn.BackgroundColor3 = Color3.fromRGB(60, 35, 10)
+        cookBtnStroke.Color = Color3.fromRGB(255, 150, 30)
+        updateStatus(statusLabel, "Auto-Cooking...", Color3.fromRGB(255, 160, 40))
+        autoCookThread = task.spawn(function()
+            autoCookLoop(statusLabel)
+        end)
+    else
+        cookBtn.Text = "Auto-Cook   [ OFF ]"
+        cookBtn.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
+        cookBtnStroke.Color = Color3.fromRGB(70, 70, 90)
+        updateStatus(statusLabel, "Idle", Color3.fromRGB(110, 110, 110))
+        if autoCookThread then task.cancel(autoCookThread) autoCookThread = nil end
+    end
+end)
+
+-- Max bag size input
+maxBagInput.FocusLost:Connect(function()
+    local val = tonumber(maxBagInput.Text)
+    if val and val >= 1 and val <= 20 then
+        maxBagSize = math.floor(val)
+        maxBagInput.Text = tostring(maxBagSize)
+        maxBagInputStroke.Color = Color3.fromRGB(50, 190, 70)
+        task.delay(1, function()
+            maxBagInputStroke.Color = Color3.fromRGB(80, 80, 100)
+        end)
+    else
+        maxBagInput.Text = tostring(maxBagSize)
+        maxBagInputStroke.Color = Color3.fromRGB(200, 60, 60)
+        task.delay(1, function()
+            maxBagInputStroke.Color = Color3.fromRGB(80, 80, 100)
+        end)
     end
 end)
 
@@ -1331,5 +1566,5 @@ player.CharacterAdded:Connect(function(char)
 end)
 
 -- =============================================
-print("[Fatal Floors Script v1.7] Loaded! Made by Wrath.")
+print("[Fatal Floors Script v1] Loaded! Made by Wrath.")
 -- =============================================
