@@ -710,70 +710,84 @@ local function allFoodCooked()
     return true
 end
 
+local function unequipAll()
+    local char = player.Character
+    if not char then return end
+    local humanoid = char:FindFirstChildWhichIsA("Humanoid")
+    if humanoid then
+        pcall(function() humanoid:UnequipTools() end)
+    end
+end
+
 local function autoCookLoop(statusLabel)
     while autoCookEnabled do
-
         local campfire = findCampfire()
         if not campfire then
             sendChat("Place the Campfire first.")
-            updateStatus(statusLabel, "No Campfire found!", Color3.fromRGB(220, 80, 80))
             task.wait(3)
             continue
         end
 
-        local rawFoods = getRawFoodsInInventory()
+        local rawFoodList = getRawFoodsInInventory()
 
-        if #rawFoods == 0 then
-            -- Nothing left to cook — go to map
-            updateStatus(statusLabel, "All cooked! Returning to Map...", Color3.fromRGB(100, 220, 120))
+        if #rawFoodList == 0 then
             local mapPart = findMapPart()
             if mapPart then safeTeleport(mapPart) end
             task.wait(2)
-            -- Wait until raw food available again
             while autoCookEnabled and #getRawFoodsInInventory() == 0 do
                 task.wait(1)
             end
             continue
         end
 
-        -- Pick a random raw food from inventory
-        local food = rawFoods[math.random(#rawFoods)]
-        if not food or not food.Parent then continue end
+        -- Cook each raw food one by one sequentially
+        for _, food in ipairs(rawFoodList) do
+            if not autoCookEnabled then break end
+            if not food or not food.Parent then continue end
+            -- Skip if already cooked name
+            if not cookedMap[food.Name] then continue end
 
-        local expectedCooked = cookedMap[food.Name]
-        updateStatus(statusLabel, "Cooking " .. food.Name .. "...", Color3.fromRGB(255, 160, 40))
+            local expectedCooked = cookedMap[food.Name]
 
-        -- Equip the food and teleport to campfire
-        equipTool(food)
-        task.wait(0.2)
-        safeTeleport(campfire)
-        task.wait(0.2)
+            -- Unequip whatever is currently held first
+            unequipAll()
+            task.wait(0.2)
 
-        -- Spam proximity prompt until food becomes cooked (name changes) or disappears
-        local attempts = 0
-        while autoCookEnabled and attempts < 80 do
-            -- Check if cooked version now in inventory
-            local tools = getAllToolsInInventory()
-            local foundCooked = false
-            local stillRaw = false
-            for _, t in ipairs(tools) do
-                if t.Name == expectedCooked then foundCooked = true end
-                if t == food and t.Parent then stillRaw = true end
-            end
+            -- Equip the raw food
+            equipTool(food)
+            task.wait(0.25)
 
-            if foundCooked or not stillRaw then
-                -- Successfully cooked!
-                updateStatus(statusLabel, food.Name .. " → " .. expectedCooked, Color3.fromRGB(100, 220, 120))
-                break
-            end
-
-            -- Re-equip and spam
-            if food and food.Parent then equipTool(food) end
             safeTeleport(campfire)
-            task.wait(0.05)
-            fireNearbyProximityPrompts(campfire.Position, 15)
-            attempts += 1
-            task.wait(0.08)
+            task.wait(0.2)
+
+            -- Spam until food name changes to cooked or disappears
+            local attempts = 0
+            while autoCookEnabled and attempts < 80 do
+                -- Check if cooked version now exists in inventory
+                local allTools = getAllToolsInInventory()
+                local foundCooked = false
+                local stillRaw = false
+                for _, t in ipairs(allTools) do
+                    if t.Name == expectedCooked then foundCooked = true end
+                    if t == food and t.Parent then stillRaw = true end
+                end
+                if foundCooked or not stillRaw then break end
+
+                -- Re-equip raw food and spam
+                if food and food.Parent then
+                    equipTool(food)
+                    task.wait(0.1)
+                end
+                safeTeleport(campfire)
+                task.wait(0.05)
+                fireNearbyProximityPrompts(campfire.Position, 15)
+                attempts += 1
+                task.wait(0.08)
+            end
+
+            -- Unequip cooked food before moving to next
+            unequipAll()
+            task.wait(0.2)
         end
 
         task.wait(0.1)
@@ -980,7 +994,7 @@ titleLabel.TextXAlignment = Enum.TextXAlignment.Left
 titleLabel.Parent = titleBar
 
 local creditLabel = Instance.new("TextLabel")
-creditLabel.Text = "by Wrath"
+creditLabel.Text = "by Devious Goober"
 creditLabel.Size = UDim2.new(0, 60, 0, 14)
 creditLabel.Position = UDim2.new(0, 10, 1, -15)
 creditLabel.BackgroundTransparency = 1
@@ -1344,7 +1358,7 @@ returnBtnStroke.Thickness = 1
 returnBtnStroke.Parent = returnBtn
 
 local watermark = Instance.new("TextLabel")
-watermark.Text = "Fatal Floors Script v1  •  by Wrath"
+watermark.Text = "Fatal Floors Script v1  •  by Devious Goober"
 watermark.Size = UDim2.new(1, 0, 0, 16)
 watermark.Position = UDim2.new(0, 0, 0, BASE_WM)
 watermark.BackgroundTransparency = 1
@@ -1749,5 +1763,5 @@ player.CharacterAdded:Connect(function(char)
 end)
 
 -- =============================================
-print("[Fatal Floors Script v1] Loaded! Made by Wrath.")
+print("[Fatal Floors Script v1] Loaded! Made by Devious Goober.")
 -- =============================================
