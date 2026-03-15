@@ -951,7 +951,224 @@ screenGui.ResetOnSpawn = false
 screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 screenGui.Parent = player:WaitForChild("PlayerGui")
 
--- Main Frame
+-- =============================================
+-- LOADING SCREEN
+-- =============================================
+
+local loadFrame = Instance.new("Frame")
+loadFrame.Name = "LoadScreen"
+loadFrame.Size = UDim2.new(1, 0, 1, 0)
+loadFrame.Position = UDim2.new(0, 0, 0, 0)
+loadFrame.BackgroundColor3 = Color3.fromRGB(8, 8, 12)
+loadFrame.BorderSizePixel = 0
+loadFrame.ZIndex = 100
+loadFrame.Parent = screenGui
+
+-- Vignette gradient
+local vignette = Instance.new("UIGradient")
+vignette.Color = ColorSequence.new({
+    ColorSequenceKeypoint.new(0, Color3.fromRGB(0, 0, 0)),
+    ColorSequenceKeypoint.new(0.5, Color3.fromRGB(18, 8, 8)),
+    ColorSequenceKeypoint.new(1, Color3.fromRGB(0, 0, 0)),
+})
+vignette.Rotation = 45
+vignette.Parent = loadFrame
+
+-- Logo container
+local logoFrame = Instance.new("Frame")
+logoFrame.Size = UDim2.new(0, 320, 0, 180)
+logoFrame.Position = UDim2.new(0.5, -160, 0.5, -140)
+logoFrame.BackgroundTransparency = 1
+logoFrame.ZIndex = 101
+logoFrame.Parent = loadFrame
+
+-- Warning icon
+local warnIcon = Instance.new("TextLabel")
+warnIcon.Text = "⚠"
+warnIcon.Size = UDim2.new(0, 60, 0, 60)
+warnIcon.Position = UDim2.new(0.5, -30, 0, 0)
+warnIcon.BackgroundTransparency = 1
+warnIcon.TextColor3 = Color3.fromRGB(220, 50, 50)
+warnIcon.Font = Enum.Font.GothamBold
+warnIcon.TextSize = 48
+warnIcon.TextTransparency = 1
+warnIcon.ZIndex = 101
+warnIcon.Parent = logoFrame
+
+-- Title
+local loadTitle = Instance.new("TextLabel")
+loadTitle.Text = "Fatal Floors Script"
+loadTitle.Size = UDim2.new(1, 0, 0, 40)
+loadTitle.Position = UDim2.new(0, 0, 0, 68)
+loadTitle.BackgroundTransparency = 1
+loadTitle.TextColor3 = Color3.fromRGB(220, 50, 50)
+loadTitle.Font = Enum.Font.GothamBold
+loadTitle.TextSize = 28
+loadTitle.TextTransparency = 1
+loadTitle.ZIndex = 101
+loadTitle.Parent = logoFrame
+
+-- Subtitle
+local loadSub = Instance.new("TextLabel")
+loadSub.Text = "by Devious Goober"
+loadSub.Size = UDim2.new(1, 0, 0, 20)
+loadSub.Position = UDim2.new(0, 0, 0, 112)
+loadSub.BackgroundTransparency = 1
+loadSub.TextColor3 = Color3.fromRGB(120, 120, 140)
+loadSub.Font = Enum.Font.Gotham
+loadSub.TextSize = 13
+loadSub.TextTransparency = 1
+loadSub.ZIndex = 101
+loadSub.Parent = logoFrame
+
+-- Divider line
+local loadLine = Instance.new("Frame")
+loadLine.Size = UDim2.new(0, 0, 0, 1)
+loadLine.Position = UDim2.new(0.5, 0, 0, 140)
+loadLine.BackgroundColor3 = Color3.fromRGB(180, 40, 40)
+loadLine.BorderSizePixel = 0
+loadLine.ZIndex = 101
+loadLine.Parent = logoFrame
+
+-- Status text
+local loadStatus = Instance.new("TextLabel")
+loadStatus.Text = "Initializing..."
+loadStatus.Size = UDim2.new(1, 0, 0, 20)
+loadStatus.Position = UDim2.new(0, 0, 0, 152)
+loadStatus.BackgroundTransparency = 1
+loadStatus.TextColor3 = Color3.fromRGB(160, 160, 180)
+loadStatus.Font = Enum.Font.Gotham
+loadStatus.TextSize = 12
+loadStatus.TextTransparency = 1
+loadStatus.ZIndex = 101
+loadStatus.Parent = logoFrame
+
+-- Progress bar background
+local progressBg = Instance.new("Frame")
+progressBg.Size = UDim2.new(0, 300, 0, 4)
+progressBg.Position = UDim2.new(0.5, -150, 0.5, 60)
+progressBg.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
+progressBg.BorderSizePixel = 0
+progressBg.ZIndex = 101
+progressBg.Parent = loadFrame
+Instance.new("UICorner", progressBg).CornerRadius = UDim.new(1, 0)
+
+-- Progress bar fill
+local progressFill = Instance.new("Frame")
+progressFill.Size = UDim2.new(0, 0, 1, 0)
+progressFill.Position = UDim2.new(0, 0, 0, 0)
+progressFill.BackgroundColor3 = Color3.fromRGB(220, 50, 50)
+progressFill.BorderSizePixel = 0
+progressFill.ZIndex = 102
+progressFill.Parent = progressBg
+Instance.new("UICorner", progressFill).CornerRadius = UDim.new(1, 0)
+
+-- Progress percentage
+local progressPct = Instance.new("TextLabel")
+progressPct.Text = "0%"
+progressPct.Size = UDim2.new(0, 300, 0, 20)
+progressPct.Position = UDim2.new(0.5, -150, 0.5, 70)
+progressPct.BackgroundTransparency = 1
+progressPct.TextColor3 = Color3.fromRGB(100, 100, 120)
+progressPct.Font = Enum.Font.Gotham
+progressPct.TextSize = 11
+progressPct.TextTransparency = 1
+progressPct.ZIndex = 101
+progressPct.Parent = loadFrame
+
+-- Spinning dots indicator
+local dotsLabel = Instance.new("TextLabel")
+dotsLabel.Text = "●  ○  ○"
+dotsLabel.Size = UDim2.new(0, 80, 0, 20)
+dotsLabel.Position = UDim2.new(0.5, -40, 0.5, 90)
+dotsLabel.BackgroundTransparency = 1
+dotsLabel.TextColor3 = Color3.fromRGB(220, 50, 50)
+dotsLabel.Font = Enum.Font.GothamBold
+dotsLabel.TextSize = 14
+dotsLabel.TextTransparency = 1
+dotsLabel.ZIndex = 101
+dotsLabel.Parent = loadFrame
+
+local dotPatterns = {"●  ○  ○", "○  ●  ○", "○  ○  ●"}
+local dotIndex = 1
+local dotThread
+
+-- Loading steps
+local loadSteps = {
+    {text = "Initializing systems...",   pct = 0.1},
+    {text = "Loading player data...",    pct = 0.25},
+    {text = "Connecting services...",    pct = 0.4},
+    {text = "Scanning workspace...",     pct = 0.55},
+    {text = "Building interface...",     pct = 0.7},
+    {text = "Configuring modules...",    pct = 0.85},
+    {text = "Almost ready...",           pct = 0.95},
+    {text = "Done!",                     pct = 1.0},
+}
+
+local tweenFast = TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+local tweenSlow = TweenInfo.new(0.6, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+local tweenMed  = TweenInfo.new(0.4, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+
+-- Fade in logo elements
+task.spawn(function()
+    -- Fade in icon + title
+    TweenService:Create(warnIcon, tweenSlow, {TextTransparency = 0}):Play()
+    task.wait(0.15)
+    TweenService:Create(loadTitle, tweenSlow, {TextTransparency = 0}):Play()
+    task.wait(0.15)
+    TweenService:Create(loadSub, tweenSlow, {TextTransparency = 0}):Play()
+    task.wait(0.2)
+
+    -- Expand divider line
+    TweenService:Create(loadLine, tweenMed, {
+        Size = UDim2.new(1, 0, 0, 1),
+        Position = UDim2.new(0, 0, 0, 140)
+    }):Play()
+    task.wait(0.3)
+
+    -- Fade in status + progress
+    TweenService:Create(loadStatus, tweenFast, {TextTransparency = 0}):Play()
+    TweenService:Create(progressPct, tweenFast, {TextTransparency = 0}):Play()
+    TweenService:Create(dotsLabel, tweenFast, {TextTransparency = 0}):Play()
+    task.wait(0.2)
+
+    -- Spinning dots animation
+    dotThread = task.spawn(function()
+        while loadFrame and loadFrame.Parent do
+            dotIndex = (dotIndex % 3) + 1
+            dotsLabel.Text = dotPatterns[dotIndex]
+            task.wait(0.35)
+        end
+    end)
+
+    -- Step through loading
+    for _, step in ipairs(loadSteps) do
+        loadStatus.Text = step.text
+        TweenService:Create(progressFill, tweenMed, {
+            Size = UDim2.new(step.pct, 0, 1, 0)
+        }):Play()
+        progressPct.Text = math.floor(step.pct * 100) .. "%"
+        task.wait(0.28)
+    end
+
+    task.wait(0.4)
+
+    -- Stop dots
+    if dotThread then task.cancel(dotThread) dotThread = nil end
+    dotsLabel.Text = "●  ●  ●"
+
+    task.wait(0.2)
+
+    -- Slide out downward
+    TweenService:Create(loadFrame, TweenInfo.new(0.5, Enum.EasingStyle.Quint, Enum.EasingDirection.In), {
+        Position = UDim2.new(0, 0, 1, 0)
+    }):Play()
+
+    task.wait(0.55)
+    loadFrame:Destroy()
+end)
+
+-- Main Frame (hidden until loading done — starts invisible then fades in)
 local mainFrame = Instance.new("Frame")
 mainFrame.Name = "MainFrame"
 mainFrame.Size = UDim2.new(0, 300, 0, 340)
@@ -959,8 +1176,18 @@ mainFrame.Position = UDim2.new(0, 10, 0, 60)
 mainFrame.BackgroundColor3 = Color3.fromRGB(12, 12, 18)
 mainFrame.BorderSizePixel = 0
 mainFrame.Active = true
+mainFrame.BackgroundTransparency = 1
+mainFrame.Visible = false
 mainFrame.Parent = screenGui
 Instance.new("UICorner", mainFrame).CornerRadius = UDim.new(0, 10)
+
+-- Fade in after loading screen exits (~2.8s total)
+task.delay(2.8, function()
+    mainFrame.Visible = true
+    TweenService:Create(mainFrame, TweenInfo.new(0.4, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+        BackgroundTransparency = 0
+    }):Play()
+end)
 
 local mainStroke = Instance.new("UIStroke")
 mainStroke.Color = Color3.fromRGB(180, 40, 40)
