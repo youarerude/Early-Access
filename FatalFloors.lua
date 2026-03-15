@@ -1093,23 +1093,27 @@ local dotPatterns = {"●  ○  ○", "○  ●  ○", "○  ○  ●"}
 local dotIndex = 1
 local dotThread
 
--- Loading steps
-local loadSteps = {
-    {text = "Initializing systems...",   pct = 0.1},
-    {text = "Loading player data...",    pct = 0.25},
-    {text = "Connecting services...",    pct = 0.4},
-    {text = "Scanning workspace...",     pct = 0.55},
-    {text = "Building interface...",     pct = 0.7},
-    {text = "Configuring modules...",    pct = 0.85},
-    {text = "Almost ready...",           pct = 0.95},
-    {text = "Done!",                     pct = 1.0},
+-- Status text shown at these % thresholds
+local statusSteps = {
+    {pct = 0,   text = "Creating GUI..."},
+    {pct = 15,  text = "Loading Text..."},
+    {pct = 29,  text = "Creating Buttons..."},
+    {pct = 43,  text = "Loading Functions..."},
+    {pct = 58,  text = "Loading extra stuff..."},
+    {pct = 72,  text = "Loading ANOTHER extra stuff..."},
+    {pct = 90,  text = "Loaded!"},
 }
 
 local tweenFast = TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
 local tweenSlow = TweenInfo.new(0.6, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
 local tweenMed  = TweenInfo.new(0.4, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
 
--- Fade in logo elements
+-- Preload sound
+local loadedSound = Instance.new("Sound")
+loadedSound.SoundId = "rbxassetid://125936118513893"
+loadedSound.Volume = 0.8
+loadedSound.Parent = screenGui
+
 task.spawn(function()
     -- Fade in icon + title
     TweenService:Create(warnIcon, tweenSlow, {TextTransparency = 0}):Play()
@@ -1141,23 +1145,35 @@ task.spawn(function()
         end
     end)
 
-    -- Step through loading
-    for _, step in ipairs(loadSteps) do
-        loadStatus.Text = step.text
-        TweenService:Create(progressFill, tweenMed, {
-            Size = UDim2.new(step.pct, 0, 1, 0)
-        }):Play()
-        progressPct.Text = math.floor(step.pct * 100) .. "%"
-        task.wait(0.28)
+    -- 1% per 0.022s = 2.2s total for bar
+    local currentStatus = 0
+    for pct = 0, 100 do
+        if not loadFrame or not loadFrame.Parent then break end
+
+        -- Update status text at thresholds
+        for i = #statusSteps, 1, -1 do
+            if pct >= statusSteps[i].pct and currentStatus < i then
+                currentStatus = i
+                loadStatus.Text = statusSteps[i].text
+                break
+            end
+        end
+
+        -- Update bar and percentage
+        progressFill.Size = UDim2.new(pct / 100, 0, 1, 0)
+        progressPct.Text = pct .. "%"
+
+        task.wait(0.022)
     end
 
-    task.wait(0.4)
+    -- Play loaded sound
+    loadedSound:Play()
 
     -- Stop dots
     if dotThread then task.cancel(dotThread) dotThread = nil end
     dotsLabel.Text = "●  ●  ●"
 
-    task.wait(0.2)
+    task.wait(0.5)
 
     -- Slide out downward
     TweenService:Create(loadFrame, TweenInfo.new(0.5, Enum.EasingStyle.Quint, Enum.EasingDirection.In), {
@@ -1166,6 +1182,7 @@ task.spawn(function()
 
     task.wait(0.55)
     loadFrame:Destroy()
+    loadedSound:Destroy()
 end)
 
 -- Main Frame (hidden until loading done — starts invisible then fades in)
@@ -1181,8 +1198,8 @@ mainFrame.Visible = false
 mainFrame.Parent = screenGui
 Instance.new("UICorner", mainFrame).CornerRadius = UDim.new(0, 10)
 
--- Fade in after loading screen exits (~2.8s total)
-task.delay(2.8, function()
+-- Fade in after loading screen exits (~4.3s total)
+task.delay(4.3, function()
     mainFrame.Visible = true
     TweenService:Create(mainFrame, TweenInfo.new(0.4, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
         BackgroundTransparency = 0
