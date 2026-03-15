@@ -34,6 +34,10 @@ local espThread = nil
 local autoCookEnabled = false
 local autoCookThread = nil
 
+local autocollectEggEnabled = false
+local autocollectEggThread = nil
+local floatPart = nil -- invisible float platform under feet
+
 local maxBagSize = 2 -- adjustable via text input
 
 local grabItemsList = {
@@ -777,6 +781,137 @@ local function autoCookLoop(statusLabel)
 end
 
 -- =============================================
+-- AUTOCOLLECT GIANT EGG
+-- =============================================
+
+local function findGiantEggs()
+    local eggs = {}
+    for _, obj in ipairs(workspace:GetDescendants()) do
+        if obj.Name == "Giant Egg" and obj:IsA("BasePart") then
+            table.insert(eggs, obj)
+        end
+    end
+    return eggs
+end
+
+local function createFloatPart()
+    -- Invisible part that keeps player floating in air
+    local part = Instance.new("Part")
+    part.Name = "EggFloatPad"
+    part.Size = Vector3.new(4, 1, 4)
+    part.Anchored = true
+    part.CanCollide = true
+    part.Transparency = 1
+    part.CanTouch = false
+    part.CastShadow = false
+    part.Parent = workspace
+    return part
+end
+
+local function updateFloatPart(position)
+    if floatPart and floatPart.Parent then
+        floatPart.CFrame = CFrame.new(position - Vector3.new(0, 3, 0))
+    end
+end
+
+local function removeFloatPart()
+    if floatPart and floatPart.Parent then
+        floatPart:Destroy()
+    end
+    floatPart = nil
+end
+
+local function teleportBelowEgg(egg)
+    local hrp = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+    if hrp and egg and egg.Parent then
+        local targetPos = egg.Position - Vector3.new(0, 5, 0)
+        hrp.CFrame = CFrame.new(targetPos)
+        -- Place float pad right under feet
+        if floatPart and floatPart.Parent then
+            floatPart.CFrame = CFrame.new(targetPos - Vector3.new(0, 3, 0))
+        end
+    end
+end
+
+local function autocollectEggLoop(statusLabel)
+    -- Create float part
+    floatPart = createFloatPart()
+
+    while autocollectEggEnabled do
+        local eggs = findGiantEggs()
+
+        if #eggs == 0 then
+            sendChat("There's no giant kiwi.")
+            removeFloatPart()
+            local mapPart = findMapPart()
+            if mapPart then safeTeleport(mapPart) end
+            task.wait(2)
+            -- Wait until eggs appear again
+            while autocollectEggEnabled and #findGiantEggs() == 0 do
+                task.wait(1)
+            end
+            floatPart = createFloatPart()
+            continue
+        end
+
+        for _, egg in ipairs(eggs) do
+            if not autocollectEggEnabled then break end
+            if not egg or not egg.Parent then continue end
+
+            -- Check inventory before grabbing
+            if isInventoryFull() then
+                sendChat("Max Inventory, Put the eggs first.")
+                removeFloatPart()
+                local mapPart = findMapPart()
+                if mapPart then safeTeleport(mapPart) end
+                -- Wait until inventory has space
+                while autocollectEggEnabled and isInventoryFull() do
+                    task.wait(0.8)
+                end
+                floatPart = createFloatPart()
+                task.wait(0.5)
+            end
+
+            if not autocollectEggEnabled then break end
+            if not egg or not egg.Parent then continue end
+
+            -- Teleport 5 studs below egg + set float pad
+            teleportBelowEgg(egg)
+            task.wait(0.2)
+
+            -- Spam prox prompt until egg disappears
+            local attempts = 0
+            while autocollectEggEnabled and egg and egg.Parent and attempts < 60 do
+                teleportBelowEgg(egg)
+                task.wait(0.05)
+                fireNearbyProximityPrompts(egg.Position, 20)
+                attempts += 1
+                task.wait(0.08)
+            end
+
+            task.wait(0.1)
+        end
+
+        -- All eggs collected (or inventory full after last egg) — go to elevator
+        if autocollectEggEnabled then
+            removeFloatPart()
+            local mapPart = findMapPart()
+            if mapPart then safeTeleport(mapPart) end
+            task.wait(2)
+            -- Wait for eggs to respawn
+            while autocollectEggEnabled and #findGiantEggs() == 0 do
+                task.wait(1)
+            end
+            if autocollectEggEnabled then
+                floatPart = createFloatPart()
+            end
+        end
+    end
+
+    removeFloatPart()
+end
+
+-- =============================================
 -- GUI
 -- =============================================
 
@@ -875,7 +1010,7 @@ content.BackgroundTransparency = 1
 content.BorderSizePixel = 0
 content.ScrollBarThickness = 3
 content.ScrollBarImageColor3 = Color3.fromRGB(180, 40, 40)
-content.CanvasSize = UDim2.new(0, 0, 0, 540)
+content.CanvasSize = UDim2.new(0, 0, 0, 590)
 content.ScrollingDirection = Enum.ScrollingDirection.Y
 content.ElasticBehavior = Enum.ElasticBehavior.Never
 content.Parent = mainFrame
@@ -931,9 +1066,25 @@ shardBtnStroke.Color = Color3.fromRGB(70, 70, 90)
 shardBtnStroke.Thickness = 1
 shardBtnStroke.Parent = shardBtn
 
+local eggBtn = Instance.new("TextButton")
+eggBtn.Text = "Autocollect Giant Egg  [ OFF ]"
+eggBtn.Size = UDim2.new(1, 0, 0, 40)
+eggBtn.Position = UDim2.new(0, 0, 0, 124)
+eggBtn.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
+eggBtn.TextColor3 = Color3.fromRGB(200, 200, 210)
+eggBtn.Font = Enum.Font.Gotham
+eggBtn.TextSize = 13
+eggBtn.BorderSizePixel = 0
+eggBtn.Parent = content
+Instance.new("UICorner", eggBtn).CornerRadius = UDim.new(0, 8)
+local eggBtnStroke = Instance.new("UIStroke")
+eggBtnStroke.Color = Color3.fromRGB(70, 70, 90)
+eggBtnStroke.Thickness = 1
+eggBtnStroke.Parent = eggBtn
+
 local div2 = Instance.new("Frame")
 div2.Size = UDim2.new(1, 0, 0, 1)
-div2.Position = UDim2.new(0, 0, 0, 124)
+div2.Position = UDim2.new(0, 0, 0, 170)
 div2.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
 div2.BorderSizePixel = 0
 div2.Parent = content
@@ -942,7 +1093,7 @@ div2.Parent = content
 local catLabel2 = Instance.new("TextLabel")
 catLabel2.Text = "⚙  AUTOMATIC"
 catLabel2.Size = UDim2.new(1, 0, 0, 20)
-catLabel2.Position = UDim2.new(0, 0, 0, 132)
+catLabel2.Position = UDim2.new(0, 0, 0, 178)
 catLabel2.BackgroundTransparency = 1
 catLabel2.TextColor3 = Color3.fromRGB(160, 160, 160)
 catLabel2.Font = Enum.Font.GothamBold
@@ -952,7 +1103,7 @@ catLabel2.Parent = content
 
 local div3 = Instance.new("Frame")
 div3.Size = UDim2.new(1, 0, 0, 1)
-div3.Position = UDim2.new(0, 0, 0, 156)
+div3.Position = UDim2.new(0, 0, 0, 202)
 div3.BackgroundColor3 = Color3.fromRGB(180, 40, 40)
 div3.BorderSizePixel = 0
 div3.Parent = content
@@ -960,7 +1111,7 @@ div3.Parent = content
 local sellBtn = Instance.new("TextButton")
 sellBtn.Text = "Auto Sell   [ OFF ]"
 sellBtn.Size = UDim2.new(1, 0, 0, 40)
-sellBtn.Position = UDim2.new(0, 0, 0, 164)
+sellBtn.Position = UDim2.new(0, 0, 0, 210)
 sellBtn.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
 sellBtn.TextColor3 = Color3.fromRGB(200, 200, 210)
 sellBtn.Font = Enum.Font.Gotham
@@ -976,7 +1127,7 @@ sellBtnStroke.Parent = sellBtn
 local grabBtn = Instance.new("TextButton")
 grabBtn.Text = "Auto-Grab Items   [ OFF ]"
 grabBtn.Size = UDim2.new(1, 0, 0, 40)
-grabBtn.Position = UDim2.new(0, 0, 0, 210)
+grabBtn.Position = UDim2.new(0, 0, 0, 256)
 grabBtn.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
 grabBtn.TextColor3 = Color3.fromRGB(200, 200, 210)
 grabBtn.Font = Enum.Font.Gotham
@@ -992,7 +1143,7 @@ grabBtnStroke.Parent = grabBtn
 local dropdownBtn = Instance.new("TextButton")
 dropdownBtn.Text = "Select Items to Grab  ▼"
 dropdownBtn.Size = UDim2.new(1, 0, 0, 34)
-dropdownBtn.Position = UDim2.new(0, 0, 0, 256)
+dropdownBtn.Position = UDim2.new(0, 0, 0, 302)
 dropdownBtn.BackgroundColor3 = Color3.fromRGB(20, 20, 30)
 dropdownBtn.TextColor3 = Color3.fromRGB(160, 160, 180)
 dropdownBtn.Font = Enum.Font.Gotham
@@ -1009,7 +1160,7 @@ dropdownBtnStroke.Parent = dropdownBtn
 local dropdownList = Instance.new("Frame")
 dropdownList.Name = "DropdownList"
 dropdownList.Size = UDim2.new(1, 0, 0, 0)
-dropdownList.Position = UDim2.new(0, 0, 0, 294)
+dropdownList.Position = UDim2.new(0, 0, 0, 340)
 dropdownList.BackgroundColor3 = Color3.fromRGB(18, 18, 26)
 dropdownList.BorderSizePixel = 0
 dropdownList.ClipsDescendants = true
@@ -1067,15 +1218,15 @@ for i, itemName in ipairs(grabItemsList) do
 end
 
 -- BASE Y positions for all elements that push down when dropdown opens
-local BASE_COOK     = 300
-local BASE_DIVM     = 346
-local BASE_CATM     = 354
-local BASE_DIVM2    = 378
-local BASE_ESP      = 386
-local BASE_BAGLBL   = 432
-local BASE_BAGINPUT = 428
-local BASE_RETURN   = 468
-local BASE_WM       = 516
+local BASE_COOK     = 346
+local BASE_DIVM     = 392
+local BASE_CATM     = 400
+local BASE_DIVM2    = 424
+local BASE_ESP      = 432
+local BASE_BAGLBL   = 478
+local BASE_BAGINPUT = 474
+local BASE_RETURN   = 514
+local BASE_WM       = 562
 
 local cookBtn = Instance.new("TextButton")
 cookBtn.Text = "Auto-Cook   [ OFF ]"
@@ -1165,7 +1316,7 @@ maxBagInputStroke.Thickness = 1
 maxBagInputStroke.Parent = maxBagInput
 
 local returnBtn = Instance.new("TextButton")
-returnBtn.Text = "Return to Map"
+returnBtn.Text = "Return to Elevator"
 returnBtn.Size = UDim2.new(1, 0, 0, 40)
 returnBtn.Position = UDim2.new(0, 0, 0, BASE_RETURN)
 returnBtn.BackgroundColor3 = Color3.fromRGB(35, 20, 20)
@@ -1353,16 +1504,19 @@ closeBtn.MouseButton1Click:Connect(function()
 
     autocollectOreEnabled = false
     autocollectShardEnabled = false
+    autocollectEggEnabled = false
     autoSellEnabled = false
     autoGrabEnabled = false
     autoCookEnabled = false
     espEnabled = false
     if autocollectOreThread then task.cancel(autocollectOreThread) end
     if autocollectShardThread then task.cancel(autocollectShardThread) end
+    if autocollectEggThread then task.cancel(autocollectEggThread) end
     if autoSellThread then task.cancel(autoSellThread) end
     if autoGrabThread then task.cancel(autoGrabThread) end
     if autoCookThread then task.cancel(autoCookThread) end
     if espThread then task.cancel(espThread) end
+    removeFloatPart()
     clearESP()
 
     -- Fade + shrink out
@@ -1401,7 +1555,6 @@ shardBtn.MouseButton1Click:Connect(function()
         shardBtn.Text = "Autocollect Shard  [ ON ]"
         shardBtn.BackgroundColor3 = Color3.fromRGB(15, 40, 80)
         shardBtnStroke.Color = Color3.fromRGB(80, 160, 255)
-        updateStatus(statusLabel, "Collecting shards...", Color3.fromRGB(100, 180, 255))
         autocollectShardThread = task.spawn(function()
             autocollectShardLoop(statusLabel)
         end)
@@ -1409,8 +1562,25 @@ shardBtn.MouseButton1Click:Connect(function()
         shardBtn.Text = "Autocollect Shard  [ OFF ]"
         shardBtn.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
         shardBtnStroke.Color = Color3.fromRGB(70, 70, 90)
-        updateStatus(statusLabel, "Idle", Color3.fromRGB(110, 110, 110))
         if autocollectShardThread then task.cancel(autocollectShardThread) autocollectShardThread = nil end
+    end
+end)
+
+eggBtn.MouseButton1Click:Connect(function()
+    autocollectEggEnabled = not autocollectEggEnabled
+    if autocollectEggEnabled then
+        eggBtn.Text = "Autocollect Giant Egg  [ ON ]"
+        eggBtn.BackgroundColor3 = Color3.fromRGB(50, 35, 10)
+        eggBtnStroke.Color = Color3.fromRGB(220, 180, 30)
+        autocollectEggThread = task.spawn(function()
+            autocollectEggLoop(statusLabel)
+        end)
+    else
+        eggBtn.Text = "Autocollect Giant Egg  [ OFF ]"
+        eggBtn.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
+        eggBtnStroke.Color = Color3.fromRGB(70, 70, 90)
+        if autocollectEggThread then task.cancel(autocollectEggThread) autocollectEggThread = nil end
+        removeFloatPart()
     end
 end)
 
@@ -1472,7 +1642,7 @@ dropdownBtn.MouseButton1Click:Connect(function()
             }):Play()
         end
         TweenService:Create(content, dropTweenInfo, {
-            CanvasSize = UDim2.new(0, 0, 0, 540 + DROPDOWN_FULL_H)
+            CanvasSize = UDim2.new(0, 0, 0, 590 + DROPDOWN_FULL_H)
         }):Play()
     else
         dropdownBtn.Text = "Select Items to Grab  ▼"
@@ -1489,7 +1659,7 @@ dropdownBtn.MouseButton1Click:Connect(function()
             }):Play()
         end
         TweenService:Create(content, dropTweenInfo, {
-            CanvasSize = UDim2.new(0, 0, 0, 540)
+            CanvasSize = UDim2.new(0, 0, 0, 590)
         }):Play()
     end
 end)
@@ -1563,6 +1733,7 @@ end)
 
 player.CharacterAdded:Connect(function(char)
     character = char
+    removeFloatPart()
 end)
 
 -- =============================================
