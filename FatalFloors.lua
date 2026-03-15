@@ -785,10 +785,22 @@ end
 -- =============================================
 
 local function findGiantEggs()
+    -- Structure: ProcGenGenerated > Nest (Model) > EggSpot1/2/3 (Part) > Giant Egg (Tool)
+    -- Returns list of {spot = Part, tool = Tool} for each occupied egg spot
+    local generated = workspace:FindFirstChild("ProcGenGenerated")
+        or workspace:FindFirstChild("ProcGenGenerated", true)
+    if not generated then return {} end
+
+    local nest = generated:FindFirstChild("Nest")
+    if not nest then return {} end
+
     local eggs = {}
-    for _, obj in ipairs(workspace:GetDescendants()) do
-        if obj.Name == "Giant Egg" and obj:IsA("BasePart") then
-            table.insert(eggs, obj)
+    for _, spot in ipairs(nest:GetChildren()) do
+        if spot:IsA("BasePart") and string.find(spot.Name, "EggSpot") then
+            local tool = spot:FindFirstChild("Giant Egg")
+            if tool then
+                table.insert(eggs, { spot = spot, tool = tool })
+            end
         end
     end
     return eggs
@@ -834,7 +846,6 @@ local function teleportBelowEgg(egg)
 end
 
 local function autocollectEggLoop(statusLabel)
-    -- Create float part
     floatPart = createFloatPart()
 
     while autocollectEggEnabled do
@@ -846,7 +857,6 @@ local function autocollectEggLoop(statusLabel)
             local mapPart = findMapPart()
             if mapPart then safeTeleport(mapPart) end
             task.wait(2)
-            -- Wait until eggs appear again
             while autocollectEggEnabled and #findGiantEggs() == 0 do
                 task.wait(1)
             end
@@ -854,9 +864,13 @@ local function autocollectEggLoop(statusLabel)
             continue
         end
 
-        for _, egg in ipairs(eggs) do
+        for _, entry in ipairs(eggs) do
             if not autocollectEggEnabled then break end
-            if not egg or not egg.Parent then continue end
+
+            local spot = entry.spot
+            local tool = entry.tool
+
+            if not spot or not spot.Parent then continue end
 
             -- Check inventory before grabbing
             if isInventoryFull() then
@@ -864,7 +878,6 @@ local function autocollectEggLoop(statusLabel)
                 removeFloatPart()
                 local mapPart = findMapPart()
                 if mapPart then safeTeleport(mapPart) end
-                -- Wait until inventory has space
                 while autocollectEggEnabled and isInventoryFull() do
                     task.wait(0.8)
                 end
@@ -873,18 +886,18 @@ local function autocollectEggLoop(statusLabel)
             end
 
             if not autocollectEggEnabled then break end
-            if not egg or not egg.Parent then continue end
+            if not spot or not spot.Parent then continue end
 
-            -- Teleport 5 studs below egg + set float pad
-            teleportBelowEgg(egg)
+            -- Teleport 5 studs below the EggSpot part and float
+            teleportBelowEgg(spot)
             task.wait(0.2)
 
-            -- Spam prox prompt until egg disappears
+            -- Spam prox prompt until Giant Egg tool is gone from the spot
             local attempts = 0
-            while autocollectEggEnabled and egg and egg.Parent and attempts < 60 do
-                teleportBelowEgg(egg)
+            while autocollectEggEnabled and spot:FindFirstChild("Giant Egg") and attempts < 60 do
+                teleportBelowEgg(spot)
                 task.wait(0.05)
-                fireNearbyProximityPrompts(egg.Position, 20)
+                fireNearbyProximityPrompts(spot.Position, 15)
                 attempts += 1
                 task.wait(0.08)
             end
@@ -892,13 +905,12 @@ local function autocollectEggLoop(statusLabel)
             task.wait(0.1)
         end
 
-        -- All eggs collected (or inventory full after last egg) — go to elevator
+        -- All eggs collected — go to elevator
         if autocollectEggEnabled then
             removeFloatPart()
             local mapPart = findMapPart()
             if mapPart then safeTeleport(mapPart) end
             task.wait(2)
-            -- Wait for eggs to respawn
             while autocollectEggEnabled and #findGiantEggs() == 0 do
                 task.wait(1)
             end
